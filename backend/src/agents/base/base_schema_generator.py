@@ -9,7 +9,7 @@ from ...config import settings
 class BaseSchemaGenerator:
     """Base class for generating JSON schemas from purpose and HTML samples."""
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "claude-sonnet-4-5-20250929"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "claude-sonnet-4-20250514"):
         """Initialize the schema generator.
 
         Args:

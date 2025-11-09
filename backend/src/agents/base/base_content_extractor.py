@@ -9,7 +9,7 @@ from ...config import settings
 class BaseContentExtractor:
     """Base class for extracting structured data from HTML using a schema."""
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "claude-sonnet-4-5-20250929"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "claude-sonnet-4-20250514"):
         """Initialize the content extractor.
 
         Args:
