@@ -66,6 +66,127 @@ The API will be available at:
 - Interactive Docs: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
+### Docker Deployment
+
+For production deployment or isolated development, use Docker:
+
+**Prerequisites:**
+- Docker and Docker Compose installed
+
+**Quick Start:**
+
+1. Create `.env` file with required variables:
+```bash
+ANTHROPIC_API_KEY=your_api_key_here
+MILVUS_HOST=milvus-standalone
+MILVUS_PORT=19530
+```
+
+2. Start all services:
+```bash
+docker-compose up -d
+```
+
+This will start:
+- **FastAPI backend** (port 8000)
+- **Milvus vector database** (port 19530)
+- **MinIO object storage** (port 9000, console: 9001)
+- **etcd** for Milvus metadata
+
+3. Check service status:
+```bash
+docker-compose ps
+```
+
+4. View logs:
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f backend
+```
+
+5. Stop services:
+```bash
+docker-compose down
+```
+
+**Access Points:**
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+- MinIO Console: http://localhost:9001 (admin/minioadmin)
+
+**Data Persistence:**
+
+Data is persisted in Docker volumes:
+- `milvus_data/` - Vector database storage
+- `minio_data/` - Object storage
+- `etcd_data/` - Metadata storage
+
+**Development with Docker:**
+
+For development with auto-reload:
+```bash
+# Modify docker-compose.yml to mount source code
+docker-compose up backend
+```
+
+**Troubleshooting:**
+
+1. Port conflicts: Change ports in `docker-compose.yml`
+2. Reset data: `docker-compose down -v` (removes volumes)
+3. Rebuild images: `docker-compose build --no-cache`
+
+## CLI Tools
+
+The backend includes powerful CLI tools for scraping and embedding content. See [`src/cli/README.md`](src/cli/README.md) for detailed documentation.
+
+### Scrape CLI
+
+Scrape websites with real-time progress tracking:
+
+```bash
+# Scrape a single page
+python -m src.cli.scrape https://example.com --mode single-page
+
+# Scrape entire website
+python -m src.cli.scrape https://example.com --mode whole-site --purpose "Scrape gym information"
+```
+
+Features:
+- Real-time progress with spinner and page count
+- Elapsed time tracking
+- Final summary with scraped URLs
+- Session ID for later reference
+
+### Embed Sites CLI
+
+Embed scraped content into Milvus vector database with multi-level progress tracking:
+
+```bash
+# List available cleaned markdown files
+python -m src.cli.embed_sites list
+
+# Embed all files
+python -m src.cli.embed_sites embed
+
+# Embed specific file
+python -m src.cli.embed_sites embed --file example.com__20251124.json
+
+# Delete collection
+python -m src.cli.embed_sites delete
+
+# Delete specific domain
+python -m src.cli.embed_sites delete --domain example.com
+```
+
+Features:
+- Three-level progress bars (Files → Pages → Chunks)
+- BGE-M3 embeddings for semantic search
+- Safe deletion with confirmation prompts
+- Comprehensive file listing
+
 ## API Endpoints
 
 ### Scraping
