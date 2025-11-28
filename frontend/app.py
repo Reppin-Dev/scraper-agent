@@ -316,6 +316,24 @@ def enable_chat() -> Tuple:
     )
 
 
+def handle_feedback(data: gr.LikeData):
+    """Handle user feedback on chatbot responses."""
+    feedback_type = "liked" if data.liked else "disliked"
+    message_index = data.index
+    message_value = data.value
+
+    print(f"[FEEDBACK] User {feedback_type} message at index {message_index}")
+    print(f"[FEEDBACK] Message content: {message_value}")
+
+
+async def handle_example_click(evt: gr.SelectData, history):
+    """Handle when user clicks an example question."""
+    # Extract the example text from the SelectData
+    example_text = evt.value.get("text", "")
+    # Call the chat function with the example text
+    return await chat_fn(example_text, history)
+
+
 # Build Gradio interface
 with gr.Blocks(title="Reppin' Assistant") as demo:
     gr.HTML(f"<style>{custom_css}</style>")
@@ -362,7 +380,19 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
     gr.Markdown("### Ask Questions")
     chatbot = gr.Chatbot(
         label="Q&A Assistant",
-        height=400
+        height=400,
+        avatar_images=("assets/user-avatar-dark.png", "assets/bot-avatar-dark.png"),
+        feedback_options=["Like", "Dislike"],
+        examples=[
+            {"text": "What are some gyms in Toronto that offer Barre?"},
+            {"text": "Which gyms are open 24/7 in Berlin?"},
+            {"text": "Find gyms with swimming pools in Toronto"},
+            {"text": "Which studios offer hot yoga classes in Berlin?"},
+            {"text": "Show me budget-friendly gyms in Toronto"},
+            {"text": "Gyms with childcare services in Berlin?"},
+            {"text": "Are there any gyms with personal training services?"},
+            {"text": "What gyms offer group fitness classes?"}
+        ]
     )
 
     with gr.Row():
@@ -373,18 +403,6 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
             interactive=True
         )
         send_btn = gr.Button("Send", scale=1, interactive=True)
-
-    # Example queries section
-    gr.Markdown("#### Try these example questions:")
-    with gr.Row():
-        example_btn_1 = gr.Button("What are some gyms in Toronto that offer Barre?", size="sm")
-        example_btn_2 = gr.Button("Which gyms are open 24/7 in Berlin?", size="sm")
-        example_btn_3 = gr.Button("Find gyms with swimming pools in Toronto", size="sm")
-
-    with gr.Row():
-        example_btn_4 = gr.Button("Which studios offer hot yoga classes in Berlin?", size="sm")
-        example_btn_5 = gr.Button("Show me budget-friendly gyms in Toronto", size="sm")
-        example_btn_6 = gr.Button("Gyms with childcare services in Berlin?", size="sm")
 
     clear_btn = gr.Button("Clear Chat")
 
@@ -423,13 +441,15 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
 
     clear_btn.click(fn=lambda: None, outputs=[chatbot])
 
-    # Example button handlers - populate the input field with the example query
-    example_btn_1.click(fn=lambda: "What are some gyms in Toronto that offer Barre?", outputs=[msg_input])
-    example_btn_2.click(fn=lambda: "Which gyms are open 24/7 in Berlin?", outputs=[msg_input])
-    example_btn_3.click(fn=lambda: "Find gyms with swimming pools in Toronto", outputs=[msg_input])
-    example_btn_4.click(fn=lambda: "Which studios offer hot yoga classes in Berlin?", outputs=[msg_input])
-    example_btn_5.click(fn=lambda: "Show me budget-friendly gyms in Toronto", outputs=[msg_input])
-    example_btn_6.click(fn=lambda: "Gyms with childcare services in Berlin?", outputs=[msg_input])
+    # Feedback handler
+    chatbot.like(fn=handle_feedback, inputs=None, outputs=None)
+
+    # Example select handler - when user clicks an example, submit it to chat
+    chatbot.example_select(
+        fn=handle_example_click,
+        inputs=[chatbot],
+        outputs=[chatbot]
+    )
 
 if __name__ == "__main__":
     demo.queue()
