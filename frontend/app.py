@@ -328,7 +328,9 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
                 show_label=False,
                 container=False,
                 height=100,
-                elem_id="logo-image"
+                elem_id="logo-image",
+                show_download_button=False,
+                interactive=False
             )
 
     gr.HTML("<h1>Reppin' <span style='color: #61A6FB;'>Assistant</span></h1>")
@@ -372,6 +374,18 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
         )
         send_btn = gr.Button("Send", scale=1, interactive=True)
 
+    # Example queries section
+    gr.Markdown("#### Try these example questions:")
+    with gr.Row():
+        example_btn_1 = gr.Button("What are some gyms in Toronto that offer Barre?", size="sm")
+        example_btn_2 = gr.Button("Which gyms are open 24/7 in Berlin?", size="sm")
+        example_btn_3 = gr.Button("Find gyms with swimming pools in Toronto", size="sm")
+
+    with gr.Row():
+        example_btn_4 = gr.Button("Which studios offer hot yoga classes in Berlin?", size="sm")
+        example_btn_5 = gr.Button("Show me budget-friendly gyms in Toronto", size="sm")
+        example_btn_6 = gr.Button("Gyms with childcare services in Berlin?", size="sm")
+
     clear_btn = gr.Button("Clear Chat")
 
     # Event Handlers with .then() chaining
@@ -408,6 +422,14 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
     )
 
     clear_btn.click(fn=lambda: None, outputs=[chatbot])
+
+    # Example button handlers - populate the input field with the example query
+    example_btn_1.click(fn=lambda: "What are some gyms in Toronto that offer Barre?", outputs=[msg_input])
+    example_btn_2.click(fn=lambda: "Which gyms are open 24/7 in Berlin?", outputs=[msg_input])
+    example_btn_3.click(fn=lambda: "Find gyms with swimming pools in Toronto", outputs=[msg_input])
+    example_btn_4.click(fn=lambda: "Which studios offer hot yoga classes in Berlin?", outputs=[msg_input])
+    example_btn_5.click(fn=lambda: "Show me budget-friendly gyms in Toronto", outputs=[msg_input])
+    example_btn_6.click(fn=lambda: "Gyms with childcare services in Berlin?", outputs=[msg_input])
 
 if __name__ == "__main__":
     demo.queue()
