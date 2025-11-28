@@ -75,6 +75,15 @@ body {
 .message.user, .user, [data-testid="user"], .message-wrap.user {
     color: #61A6FB !important;
 }
+/* Primary button styling */
+button.primary, .primary {
+    background-color: #61A6FB !important;
+    border-color: #61A6FB !important;
+}
+button.primary:hover, .primary:hover {
+    background-color: #4a8fd9 !important;
+    border-color: #4a8fd9 !important;
+}
 """
 
 
