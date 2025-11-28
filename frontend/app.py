@@ -329,7 +329,7 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
                 container=False,
                 height=100,
                 elem_id="logo-image",
-                show_download_button=False,
+                buttons=None,
                 interactive=False
             )
 
