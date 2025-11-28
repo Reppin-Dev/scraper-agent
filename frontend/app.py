@@ -13,6 +13,27 @@ load_dotenv()
 API_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 custom_css = """
+/* Global theme colors */
+.gradio-container {
+    background-color: #0E172A !important;
+    color: #F7F7FA !important;
+}
+body {
+    background-color: #0E172A !important;
+}
+/* Logo styling */
+#logo-image {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 auto 20px auto;
+}
+#logo-image img {
+    max-width: 300px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
 .log-container {
     max-height: 200px;
     overflow-y: auto;
@@ -27,7 +48,7 @@ custom_css = """
     margin: 2px 0;
     animation: fadeIn 0.3s;
     transition: opacity 1s, transform 0.3s;
-    color: #ffffff;
+    color: #F7F7FA;
 }
 .log-entry.old {
     color: #888888;
@@ -46,6 +67,14 @@ custom_css = """
 .status-in_progress { background: #cfe2ff; color: #084298; }
 .status-completed { background: #d1e7dd; color: #0f5132; }
 .status-failed { background: #f8d7da; color: #842029; }
+/* Override Gradio default text colors */
+.gr-markdown, .gr-textbox label, .gr-button, h1, h2, h3, p {
+    color: #F7F7FA !important;
+}
+/* User text color in chatbot */
+.message.user, .user, [data-testid="user"], .message-wrap.user {
+    color: #61A6FB !important;
+}
 """
 
 
@@ -281,7 +310,19 @@ def enable_chat() -> Tuple:
 # Build Gradio interface
 with gr.Blocks(title="Reppin' Assistant") as demo:
     gr.HTML(f"<style>{custom_css}</style>")
-    gr.Markdown("# Reppin' Assistant")
+
+    # Logo - using gr.Image for better Gradio integration
+    with gr.Row():
+        with gr.Column():
+            gr.Image(
+                value="/Users/arshveergahir/Desktop/GitHub Repos/scraper-agent/frontend/reppin-logo.png",
+                show_label=False,
+                container=False,
+                height=100,
+                elem_id="logo-image"
+            )
+
+    gr.HTML("<h1>Reppin' <span style='color: #61A6FB;'>Assistant</span></h1>")
     gr.Markdown("Register your gym, or find new ones through our agent")
 
     # State
@@ -364,5 +405,5 @@ if __name__ == "__main__":
     demo.launch(
         server_port=int(os.getenv("GRADIO_SERVER_PORT", 7860)),
         server_name="0.0.0.0",
-        share=False
+        share=True
     )
