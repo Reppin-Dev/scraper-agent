@@ -8,7 +8,10 @@ python-dotenv==1.0.0
 python-multipart==0.0.6
 typer==0.9.0
 rich==13.7.0
-pymilvus==2.3.4
+# Vector database - migrated to ChromaDB for HuggingFace Spaces
+chromadb>=0.4.0
+spaces>=0.1.0
+# pymilvus==2.3.4  # Deprecated - replaced by ChromaDB
 FlagEmbedding==1.2.3
 playwright==1.40.0
 beautifulsoup4==4.12.2

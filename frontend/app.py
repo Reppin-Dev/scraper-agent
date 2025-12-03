@@ -15,11 +15,11 @@ API_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 custom_css = """
 /* Global theme colors */
 .gradio-container {
-    background-color: #262624 !important;
+    background-color: #252523 !important;
     color: #F7F7FA !important;
 }
 body {
-    background-color: #262624 !important;
+    background-color: #252523 !important;
 }
 /* DEPRECATED: Removed logo styling */
 .log-container {
@@ -73,6 +73,10 @@ button.primary:hover, .primary:hover {
     background-color: #b14e31 !important;
     border-color: #b14e31 !important;
     color: #FFFFFF !important;
+}
+/* URL input textbox background */
+.url-input-box textarea, .url-input-box input {
+    background-color: #30302E !important;
 }
 """
 
@@ -331,7 +335,7 @@ with gr.Blocks(title="Agentic Scraper") as demo:  # DEPRECATED: was "Reppin' Ass
 
     # DEPRECATED: Removed Reppin' logo section
     gr.HTML("<h1>Agentic <span style='color: #C6603F;'>Scraper</span></h1>")  # DEPRECATED: was "Reppin' <span...>Assistant</span>"
-    gr.Markdown("Scrape any website and ask questions powered by AI")  # DEPRECATED: was "Register your gym, or find new ones through our agent"
+    gr.Markdown("Scrape any website and ask questions powered by Claude AI, Milvus vector database, Playwright, and HTTPX")  # DEPRECATED: was "Register your gym, or find new ones through our agent"
 
     # State
     session_id_state = gr.State(None)
@@ -340,7 +344,8 @@ with gr.Blocks(title="Agentic Scraper") as demo:  # DEPRECATED: was "Reppin' Ass
         url_input = gr.Textbox(
             label="Enter URL to Scrape",
             placeholder="https://example.com",
-            scale=4
+            scale=4,
+            elem_classes="url-input-box"
         )
         scrape_btn = gr.Button("Start Scraping", variant="primary", scale=1)
 
