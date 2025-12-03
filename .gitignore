@@ -1,4 +1,34 @@
-/Users/arshveergahir/Desktop/GitHub Repos/scraper-agent/backend/.env
+# Environment files (NEVER commit these!)
+.env
+*.env
+!.env.example
+backend/.env
+frontend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Runtime data directories
 backend/data/
@@ -6,3 +36,13 @@ backend/etcd_data/
 backend/milvus_data/
 backend/minio_data/
 backend/models/
+backend/chroma_db/
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
