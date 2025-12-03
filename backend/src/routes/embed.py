@@ -105,7 +105,7 @@ async def execute_embed_task(filename: str) -> dict:
             }
 
         domain = data.get("website", "unknown")
-        gym_name = data.get("gym_name", "Unknown Gym")
+        site_name = data.get("site_name", "Unknown Site")  # DEPRECATED: was gym_name = data.get("gym_name", "Unknown Gym")
         pages = data.get("pages", [])
 
         if not pages:
@@ -147,7 +147,7 @@ async def execute_embed_task(filename: str) -> dict:
             # Insert chunks into Milvus
             vector_service.insert_chunks(
                 domain=domain,
-                gym_name=gym_name,
+                site_name=site_name,  # DEPRECATED: was gym_name=gym_name
                 page_name=page_name,
                 page_url=page_url,
                 chunks=chunks,

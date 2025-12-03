@@ -1,3 +1,8 @@
+# BLOAT FILE - SAFE TO DELETE
+# This file contains gym-specialized content extractor that has been deprecated.
+# Import commented out in agents/specialized/__init__.py and is no longer used.
+# Tests confirmed the application works without this file.
+#
 """Gym-specialized content extractor."""
 import json
 from typing import Dict, Any, Optional

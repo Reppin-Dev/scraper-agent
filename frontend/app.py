@@ -21,19 +21,7 @@ custom_css = """
 body {
     background-color: #0E172A !important;
 }
-/* Logo styling */
-#logo-image {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin: 0 auto 20px auto;
-}
-#logo-image img {
-    max-width: 300px;
-    height: auto;
-    display: block;
-    margin: 0 auto;
-}
+/* DEPRECATED: Removed logo styling */
 .log-container {
     max-height: 200px;
     overflow-y: auto;
@@ -296,7 +284,7 @@ async def chat_fn(message: str, history):
     except httpx.HTTPError as e:
         # Check if it's a "no embeddings" error
         if "404" in str(e) or "not found" in str(e).lower():
-            error_msg = "Please enter your gym website url above, and click 'Start Scraping'."
+            error_msg = "Please enter a website URL above and click 'Start Scraping'."  # DEPRECATED: was "Please enter your gym website url above..."
         else:
             error_msg = f"Error querying the system: {str(e)}"
 
@@ -336,24 +324,12 @@ async def handle_example_click(evt: gr.SelectData, history):
 
 
 # Build Gradio interface
-with gr.Blocks(title="Reppin' Assistant") as demo:
+with gr.Blocks(title="Agentic Scraper") as demo:  # DEPRECATED: was "Reppin' Assistant"
     gr.HTML(f"<style>{custom_css}</style>")
 
-    # Logo - using gr.Image for better Gradio integration
-    with gr.Row():
-        with gr.Column():
-            gr.Image(
-                value="/Users/arshveergahir/Desktop/GitHub Repos/scraper-agent/frontend/reppin-logo.png",
-                show_label=False,
-                container=False,
-                height=100,
-                elem_id="logo-image",
-                buttons=None,
-                interactive=False
-            )
-
-    gr.HTML("<h1>Reppin' <span style='color: #61A6FB;'>Assistant</span></h1>")
-    gr.Markdown("Register your gym, or find new ones through our agent")
+    # DEPRECATED: Removed Reppin' logo section
+    gr.HTML("<h1>Agentic <span style='color: #61A6FB;'>Scraper</span></h1>")  # DEPRECATED: was "Reppin' <span...>Assistant</span>"
+    gr.Markdown("Scrape any website and ask questions powered by AI")  # DEPRECATED: was "Register your gym, or find new ones through our agent"
 
     # State
     session_id_state = gr.State(None)
@@ -385,15 +361,15 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
         avatar_images=("assets/user-avatar-dark.png", "assets/bot-avatar-dark.png"),
         feedback_options=["Like", "Dislike"],
         examples=[
-            {"text": "What are some gyms in Toronto that offer Barre?"},
-            {"text": "Which gyms are open 24/7 in Berlin?"},
-            {"text": "Find gyms with swimming pools in Toronto"},
-            {"text": "Which studios offer hot yoga classes in Berlin?"},
-            {"text": "Show me budget-friendly gyms in Toronto"},
-            {"text": "Gyms with childcare services in Berlin?"},
-            {"text": "Are there any gyms with personal training services?"},
-            {"text": "What gyms offer group fitness classes?"}
-        ]
+            {"text": "What is this website about?"},
+            {"text": "Summarize the main services offered"},
+            {"text": "What are the pricing options?"},
+            {"text": "How can I contact support?"},
+            {"text": "What are the business hours?"},
+            {"text": "Are there any special offers or promotions?"},
+            {"text": "What payment methods are accepted?"},
+            {"text": "What is the return or refund policy?"}
+        ]  # DEPRECATED: was gym-specific examples
     )
 
     with gr.Row():

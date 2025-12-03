@@ -331,7 +331,7 @@ class StorageService:
         # Prepare data with metadata
         data = {
             "website": f"{parsed.scheme}://{parsed.netloc}",
-            "gym_name": domain.replace(".", " ").title(),
+            "site_name": domain.replace(".", " ").title(),  # DEPRECATED: was "gym_name"
             "pages": markdown_data
         }
 

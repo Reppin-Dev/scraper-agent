@@ -17,7 +17,7 @@ class QueryRequest(BaseModel):
     query: str = Field(..., description="Search query text")
     top_k: int = Field(default=5, ge=1, le=50, description="Number of results to return")
     filter_domain: Optional[str] = Field(default=None, description="Filter results by domain")
-    filter_gym: Optional[str] = Field(default=None, description="Filter results by gym name")
+    filter_site: Optional[str] = Field(default=None, description="Filter results by site name")  # DEPRECATED: was filter_gym
 
 
 class SearchResult(BaseModel):
@@ -25,7 +25,7 @@ class SearchResult(BaseModel):
 
     chunk_id: str
     domain: str
-    gym_name: str
+    site_name: str  # DEPRECATED: was gym_name
     page_name: str
     page_url: str
     chunk_text: str
@@ -63,7 +63,7 @@ async def search(request: QueryRequest):
             query=request.query,
             top_k=request.top_k,
             filter_domain=request.filter_domain,
-            filter_gym=request.filter_gym
+            filter_site=request.filter_site  # DEPRECATED: was filter_gym=request.filter_gym
         )
 
         # Convert to response format
@@ -71,7 +71,7 @@ async def search(request: QueryRequest):
             SearchResult(
                 chunk_id=result["chunk_id"],
                 domain=result["domain"],
-                gym_name=result["gym_name"],
+                site_name=result["site_name"],  # DEPRECATED: was gym_name
                 page_name=result["page_name"],
                 page_url=result["page_url"],
                 chunk_text=result["chunk_text"],
@@ -96,10 +96,10 @@ async def search(request: QueryRequest):
 class AskRequest(BaseModel):
     """Request model for Claude-powered Q&A."""
 
-    question: str = Field(..., description="Question to ask about the gyms")
+    question: str = Field(..., description="Question to ask about the websites")  # DEPRECATED: was 'about the gyms'
     top_k: int = Field(default=10, ge=1, le=50, description="Number of chunks to retrieve")
     filter_domain: Optional[str] = Field(default=None, description="Filter results by domain")
-    filter_gym: Optional[str] = Field(default=None, description="Filter results by gym name")
+    filter_site: Optional[str] = Field(default=None, description="Filter results by site name")  # DEPRECATED: was filter_gym
 
 
 class AskResponse(BaseModel):
@@ -139,7 +139,7 @@ async def ask_question(request: AskRequest):
         # ========================================
         # STAGE 1: Query Rewriting with Claude Haiku
         # ========================================
-        query_rewrite_prompt = f"""Given this user question about gyms/fitness studios, rewrite it as an optimized search query.
+        query_rewrite_prompt = f"""Given this user question about websites  # DEPRECATED: was about gyms/fitness studios, rewrite it as an optimized search query.
 
 User Question: {request.question}
 
@@ -147,7 +147,7 @@ Instructions:
 - Extract key concepts and keywords
 - Add relevant synonyms and related terms
 - Keep it concise (2-10 words)
-- Focus on terms likely to appear in gym website content
+- Focus on terms likely to appear in website content  # DEPRECATED: was gym website content
 - Do not add quotes or special characters
 
 Return ONLY the optimized search query, nothing else."""
@@ -170,7 +170,7 @@ Return ONLY the optimized search query, nothing else."""
             query=optimized_query,
             top_k=request.top_k,
             filter_domain=request.filter_domain,
-            filter_gym=request.filter_gym
+            filter_site=request.filter_site  # DEPRECATED: was filter_gym=request.filter_gym
         )
 
         if not results:
@@ -190,30 +190,30 @@ Return ONLY the optimized search query, nothing else."""
         context_parts = []
         for i, result in enumerate(results, 1):
             context_parts.append(
-                f"[Source {i} - {result['gym_name']} - {result['page_name']}]\n"
+                f"[Source {i} - {result['site_name']} - {result['page_name']}]\n"  # DEPRECATED: was gym_name
                 f"{result['chunk_text']}\n"
             )
 
         context = "\n---\n".join(context_parts)
 
-        system_prompt = """You are a helpful assistant answering questions about gyms and fitness studios.
+        system_prompt = """You are a helpful assistant answering questions about websites.  # DEPRECATED: was gyms and fitness studios
 
-You will be provided with relevant information extracted from gym websites. Use this information to answer the user's question accurately and naturally.
+You will be provided with relevant information extracted from websites  # DEPRECATED: was gym websites. Use this information to answer the user's question accurately and naturally.
 
 Guidelines:
 - Provide a clear, concise answer based ONLY on the information given
-- If multiple gyms are mentioned, organize the information clearly
+- If multiple sites are mentioned, organize the information clearly  # DEPRECATED: was gyms
 - Include specific details like addresses, prices, class types, hours when available
 - If the provided information doesn't fully answer the question, acknowledge what you can answer
 - Be conversational and helpful
-- Cite gym names when providing specific information
+- Cite site names when providing specific information  # DEPRECATED: was gym names
 - Don't make up information not present in the sources"""
 
-        user_prompt = f"""Based on the following information from gym websites, please answer this question:
+        user_prompt = f"""Based on the following information from websites  # DEPRECATED: was gym websites, please answer this question:
 
 Question: {request.question}
 
-Relevant Information from Gym Websites:
+Relevant Information from Websites:  # DEPRECATED: was Gym Websites
 {context}
 
 Please provide a natural, helpful answer based on this information."""
@@ -232,7 +232,7 @@ Please provide a natural, helpful answer based on this information."""
         # Prepare sources for response
         sources = [
             {
-                "gym_name": result["gym_name"],
+                "site_name": result["site_name"],  # DEPRECATED: was gym_name
                 "page_name": result["page_name"],
                 "page_url": result["page_url"],
                 "score": result["score"]

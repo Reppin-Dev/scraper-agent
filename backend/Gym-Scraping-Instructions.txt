@@ -1,3 +1,8 @@
+# BLOAT FILE - SAFE TO DELETE
+# This file contains gym-specific scraping instructions that have been deprecated.
+# The gym-focused scraping functionality has been generalized.
+# Tests confirmed the application works without this file.
+#
 GYM SCRAPING INSTRUCTIONS
 =========================
 

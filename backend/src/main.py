@@ -6,7 +6,8 @@ import json
 import os
 
 from .config import settings
-from .routes import scrape, sessions, gym_scrape, embed, query
+from .routes import scrape, sessions, embed, query  # DEPRECATED: removed gym_scrape
+# from .routes import gym_scrape  # DEPRECATED - gym-specific route, safe to delete
 from .utils.logger import logger
 
 # Suppress tokenizers parallelism warning
@@ -89,7 +90,7 @@ manager = ConnectionManager()
 
 # Include routers
 app.include_router(scrape.router)
-app.include_router(gym_scrape.router)
+# app.include_router(gym_scrape.router)  # DEPRECATED - gym-specific route, safe to delete
 app.include_router(sessions.router)
 app.include_router(embed.router)
 app.include_router(query.router)

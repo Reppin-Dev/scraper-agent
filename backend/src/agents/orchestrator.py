@@ -160,7 +160,7 @@ class OrchestratorAgent:
                 )
 
                 # Extract markdown sections from HTML
-                sections = html_cleaner.extract_sections(page["raw_html"], page["page_url"])
+                sections = html_cleaner.extract_sections(page["raw_html"])
 
                 # Combine all sections into single markdown content
                 markdown_content = ""

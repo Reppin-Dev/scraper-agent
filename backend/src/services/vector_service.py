@@ -30,7 +30,7 @@ class VectorService:
 
     def __init__(
         self,
-        collection_name: str = "gym_sites",
+        collection_name: str = "scraped_sites",  # DEPRECATED: was "gym_sites"
         milvus_host: str = None,
         milvus_port: int = 19530,
     ):
@@ -101,7 +101,7 @@ class VectorService:
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
             FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=256),
             FieldSchema(name="domain", dtype=DataType.VARCHAR, max_length=256),
-            FieldSchema(name="gym_name", dtype=DataType.VARCHAR, max_length=256),
+            FieldSchema(name="site_name", dtype=DataType.VARCHAR, max_length=256),  # DEPRECATED: was "gym_name"
             FieldSchema(name="page_name", dtype=DataType.VARCHAR, max_length=256),
             FieldSchema(name="page_url", dtype=DataType.VARCHAR, max_length=512),
             FieldSchema(name="chunk_text", dtype=DataType.VARCHAR, max_length=8192),
@@ -111,7 +111,7 @@ class VectorService:
 
         schema = CollectionSchema(
             fields=fields,
-            description="Gym website chunks with BGE-M3 embeddings"
+            description="Website chunks with BGE-M3 embeddings"  # DEPRECATED: was "Gym website chunks with BGE-M3 embeddings"
         )
 
         self.collection = Collection(
@@ -246,7 +246,7 @@ class VectorService:
     def insert_chunks(
         self,
         domain: str,
-        gym_name: str,
+        site_name: str,  # DEPRECATED: was gym_name
         page_name: str,
         page_url: str,
         chunks: List[Dict[str, str]],
@@ -256,7 +256,7 @@ class VectorService:
 
         Args:
             domain: Website domain
-            gym_name: Gym/studio name
+            site_name: Website/site name  # DEPRECATED: was gym_name (Gym/studio name)
             page_name: Page name
             page_url: Page URL
             chunks: List of text chunks
@@ -276,7 +276,7 @@ class VectorService:
         # Prepare data for insertion
         chunk_ids = []
         domains = []
-        gym_names = []
+        site_names = []  # DEPRECATED: was gym_names
         page_names = []
         page_urls = []
         chunk_texts = []
@@ -291,7 +291,7 @@ class VectorService:
 
             chunk_ids.append(chunk_id)
             domains.append(domain)
-            gym_names.append(gym_name)
+            site_names.append(site_name)  # DEPRECATED: was gym_names.append(gym_name)
             page_names.append(page_name)
             page_urls.append(page_url)
             # Ensure text is well under 8192 limit (use 8000 for safety)
@@ -307,7 +307,7 @@ class VectorService:
         data = [
             chunk_ids,
             domains,
-            gym_names,
+            site_names,  # DEPRECATED: was gym_names
             page_names,
             page_urls,
             chunk_texts,
@@ -325,7 +325,7 @@ class VectorService:
         query: str,
         top_k: int = 20,
         filter_domain: Optional[str] = None,
-        filter_gym: Optional[str] = None
+        filter_site: Optional[str] = None  # DEPRECATED: was filter_gym
     ) -> List[Dict[str, Any]]:
         """Search for relevant chunks using hybrid dense search.
 
@@ -333,7 +333,7 @@ class VectorService:
             query: Search query
             top_k: Number of results to return
             filter_domain: Optional domain filter
-            filter_gym: Optional gym name filter
+            filter_site: Optional site name filter  # DEPRECATED: was filter_gym (Optional gym name filter)
 
         Returns:
             List of search results with chunks and metadata
@@ -357,9 +357,9 @@ class VectorService:
         filter_expr = None
         if filter_domain:
             filter_expr = f'domain == "{filter_domain}"'
-        if filter_gym:
-            gym_filter = f'gym_name == "{filter_gym}"'
-            filter_expr = f"{filter_expr} && {gym_filter}" if filter_expr else gym_filter
+        if filter_site:  # DEPRECATED: was filter_gym
+            site_filter = f'site_name == "{filter_site}"'  # DEPRECATED: was gym_filter = f'gym_name == "{filter_gym}"'
+            filter_expr = f"{filter_expr} && {site_filter}" if filter_expr else site_filter
 
         # Search with dense vectors
         search_params = {
@@ -373,7 +373,7 @@ class VectorService:
             param=search_params,
             limit=top_k,
             expr=filter_expr,
-            output_fields=["chunk_id", "domain", "gym_name", "page_name", "page_url", "chunk_text"]
+            output_fields=["chunk_id", "domain", "site_name", "page_name", "page_url", "chunk_text"]  # DEPRECATED: was "gym_name" instead of "site_name"
         )
 
         # Format results
@@ -383,7 +383,7 @@ class VectorService:
                 formatted_results.append({
                     "chunk_id": hit.entity.get("chunk_id"),
                     "domain": hit.entity.get("domain"),
-                    "gym_name": hit.entity.get("gym_name"),
+                    "site_name": hit.entity.get("site_name"),  # DEPRECATED: was "gym_name"
                     "page_name": hit.entity.get("page_name"),
                     "page_url": hit.entity.get("page_url"),
                     "chunk_text": hit.entity.get("chunk_text"),

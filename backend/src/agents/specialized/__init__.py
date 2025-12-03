@@ -1,6 +1,7 @@
 """Specialized scraper agents for specific domains."""
 
-from .gym_schema_generator import GymSchemaGenerator
-from .gym_content_extractor import GymContentExtractor
+# DEPRECATED - gym-specific agents, safe to delete
+# from .gym_schema_generator import GymSchemaGenerator
+# from .gym_content_extractor import GymContentExtractor
 
-__all__ = ["GymSchemaGenerator", "GymContentExtractor"]
+__all__ = []  # DEPRECATED: was ["GymSchemaGenerator", "GymContentExtractor"]

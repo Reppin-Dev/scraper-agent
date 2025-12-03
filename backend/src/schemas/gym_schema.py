@@ -1,3 +1,8 @@
+# BLOAT FILE - SAFE TO DELETE
+# This file contains gym-specific extraction schema that has been deprecated.
+# Import commented out in schemas/__init__.py and is no longer used.
+# Tests confirmed the application works without this file.
+#
 """Predefined schema for gym/fitness studio data extraction."""
 
 GYM_EXTRACTION_SCHEMA = {

@@ -1,3 +1,8 @@
+# BLOAT FILE - SAFE TO DELETE
+# This file contains gym-specific scraping endpoints that have been deprecated.
+# The gym_scrape route has been commented out in main.py and is no longer registered.
+# Tests confirmed the application works without this file.
+#
 """Gym-specialized scraping API endpoints."""
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from typing import Dict, Any

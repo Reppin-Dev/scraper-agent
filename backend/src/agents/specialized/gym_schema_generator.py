@@ -1,3 +1,8 @@
+# BLOAT FILE - SAFE TO DELETE
+# This file contains gym-specialized schema generator that has been deprecated.
+# Import commented out in agents/specialized/__init__.py and is no longer used.
+# Tests confirmed the application works without this file.
+#
 """Gym-specialized schema generator."""
 from typing import Optional
 
