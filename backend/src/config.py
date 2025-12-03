@@ -1,4 +1,5 @@
 """Application configuration management."""
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # Storage Configuration
-    storage_base_path: str = "/app/data"  # Changed from ~/Downloads for container compatibility
+    storage_base_path: str = "/app/data" if os.getenv("SPACE_ID") else "./data"
 
     # Agent Configuration
     max_parallel_extractions: int = 3

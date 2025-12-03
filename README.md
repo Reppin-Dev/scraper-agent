@@ -3,8 +3,10 @@ title: Agentic Scraper
 emoji: 🤖
 colorFrom: yellow
 colorTo: red
-sdk: docker
-app_port: 7860
+sdk: gradio
+sdk_version: "6.0.1"
+app_file: frontend/app.py
+python_version: "3.11"
 ---
 
 # Agentic Scraper

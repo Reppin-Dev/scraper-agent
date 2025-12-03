@@ -4,6 +4,10 @@ import os
 import time
 from datetime import datetime
 from typing import Optional, List, Tuple, Generator
+import subprocess
+import sys
+import atexit
+from pathlib import Path
 import httpx
 import gradio as gr
 from dotenv import load_dotenv
@@ -79,6 +83,80 @@ button.primary:hover, .primary:hover {
     background-color: #30302E !important;
 }
 """
+
+
+def start_backend_server():
+    """Start the FastAPI backend as a subprocess."""
+    backend_dir = Path(__file__).parent.parent / "backend"
+
+    # Check if running in HuggingFace Spaces
+    is_hf_spaces = os.getenv("SPACE_ID") is not None
+    if is_hf_spaces:
+        backend_dir = Path("/app/backend")
+
+    if not backend_dir.exists():
+        print(f"[ERROR] Backend directory not found: {backend_dir}")
+        return None
+
+    cmd = [
+        sys.executable, "-m", "uvicorn",
+        "src.main:app",
+        "--host", "0.0.0.0",
+        "--port", "8000",
+        "--log-level", "info"
+    ]
+
+    print(f"[STARTUP] Starting backend server in {backend_dir}")
+    print(f"[STARTUP] Command: {' '.join(cmd)}")
+
+    try:
+        process = subprocess.Popen(
+            cmd,
+            cwd=str(backend_dir),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            bufsize=1
+        )
+        print(f"[STARTUP] Backend server started with PID: {process.pid}")
+        return process
+    except Exception as e:
+        print(f"[STARTUP] Failed to start backend: {e}")
+        return None
+
+
+def wait_for_backend_ready(timeout=120):
+    """Wait for backend to be ready by polling health endpoint."""
+    print("[STARTUP] Waiting for backend to be ready...")
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                response = client.get(f"{API_URL}/health")
+                if response.status_code == 200:
+                    print("[STARTUP] ✓ Backend is ready!")
+                    return True
+        except Exception:
+            pass
+
+        print(".", end="", flush=True)
+        time.sleep(2)
+
+    print("\n[STARTUP] ✗ Backend failed to start within timeout")
+    return False
+
+
+def cleanup_backend(backend_process):
+    """Cleanup backend process on exit."""
+    if backend_process and backend_process.poll() is None:
+        print("[SHUTDOWN] Stopping backend server...")
+        backend_process.terminate()
+        try:
+            backend_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            backend_process.kill()
+        print("[SHUTDOWN] Backend stopped")
 
 
 def format_logs(logs_list: List[str]) -> str:
@@ -436,9 +514,24 @@ with gr.Blocks(title="Agentic Scraper") as demo:  # DEPRECATED: was "Reppin' Ass
     )
 
 if __name__ == "__main__":
+    # Start backend server
+    backend_process = start_backend_server()
+
+    if backend_process:
+        # Register cleanup handler
+        atexit.register(cleanup_backend, backend_process)
+
+        # Wait for backend to be ready
+        if not wait_for_backend_ready():
+            print("[ERROR] Backend failed to start, exiting...")
+            sys.exit(1)
+    else:
+        print("[WARNING] Backend server not started, assuming external backend")
+
+    # Start Gradio frontend
     demo.queue()
     demo.launch(
         server_port=int(os.getenv("GRADIO_SERVER_PORT", 7860)),
         server_name="0.0.0.0",
-        share=True
+        share=False
     )
