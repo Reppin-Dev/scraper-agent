@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Anthropic API Configuration
-    anthropic_api_key: str
+    anthropic_api_key: str = ""  # Required - set via ANTHROPIC_API_KEY env var
 
     # Server Configuration
     host: str = "0.0.0.0"
@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # Storage Configuration
-    storage_base_path: str = "~/Downloads/scraper-agent"
+    storage_base_path: str = "/app/data"  # Changed from ~/Downloads for container compatibility
 
     # Agent Configuration
     max_parallel_extractions: int = 3
