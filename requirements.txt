@@ -3,11 +3,11 @@ gradio==6.0.1
 httpx>=0.25.0
 python-dotenv>=1.0.0
 
-# FastAPI Backend
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.5.0
-pydantic-settings==2.1.0
+# FastAPI Backend (compatible with Gradio 6.0.1)
+fastapi>=0.115.2
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
 
 # AI & ML
 anthropic==0.72.0
