@@ -167,8 +167,13 @@ def start_backend_server():
         return None
 
 
-def wait_for_backend_ready(timeout=120):
-    """Wait for backend to be ready by polling health endpoint."""
+def wait_for_backend_ready(timeout=300):
+    """Wait for backend to be ready by polling health endpoint.
+
+    Args:
+        timeout: Maximum time to wait in seconds (default 300s / 5 minutes).
+                 Increased from 120s to allow for BGE-M3 model download on first run.
+    """
     print("[STARTUP] Waiting for backend to be ready...")
     start_time = time.time()
 
