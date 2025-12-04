@@ -161,9 +161,26 @@ def start_backend_server():
             bufsize=1
         )
         print(f"[STARTUP] Backend server started with PID: {process.pid}")
+
+        # Give process a moment to fail if there are immediate errors
+        time.sleep(1)
+        if process.poll() is not None:
+            # Process already exited
+            print(f"[ERROR] Backend process exited immediately with code: {process.returncode}")
+            # Try to read any error output
+            try:
+                output = process.stdout.read()
+                if output:
+                    print(f"[ERROR] Backend output:\n{output}")
+            except:
+                pass
+            return None
+
         return process
     except Exception as e:
         print(f"[STARTUP] Failed to start backend: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -572,9 +589,31 @@ def validate_environment():
     print(f"[STARTUP] ANTHROPIC_API_KEY is set: {api_key[:15]}...")
 
 
+def setup_directories():
+    """Create necessary directories for data persistence."""
+    is_hf_spaces = os.getenv("SPACE_ID") is not None
+
+    if is_hf_spaces:
+        # In HuggingFace Spaces, create directories at /app
+        directories = ["/app/chroma_db", "/app/data"]
+    else:
+        # Local development
+        directories = ["./chroma_db", "./data"]
+
+    for directory in directories:
+        try:
+            Path(directory).mkdir(parents=True, exist_ok=True)
+            print(f"[STARTUP] Created directory: {directory}")
+        except Exception as e:
+            print(f"[WARNING] Failed to create directory {directory}: {e}")
+
+
 if __name__ == "__main__":
     # Validate environment before starting
     validate_environment()
+
+    # Create necessary directories
+    setup_directories()
     # Start backend server
     backend_process = start_backend_server()
 
