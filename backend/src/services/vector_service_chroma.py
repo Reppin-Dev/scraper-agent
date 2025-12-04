@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Callable
 import chromadb
 from chromadb.config import Settings
-from FlagEmbedding import BGEM3FlagModel
 
 from ..config import settings
 from ..utils.logger import logger
@@ -83,6 +82,9 @@ class VectorServiceChroma:
         """Load BGE-M3 embedding model."""
         if self.model is None:
             try:
+                # Import FlagEmbedding only when needed (lazy import)
+                from FlagEmbedding import BGEM3FlagModel
+
                 # Set PyTorch threads to 1 to prevent segfaults in Docker
                 import torch
                 import time
