@@ -53,9 +53,9 @@ class VectorServiceChroma:
         self.model: Optional[BGEM3FlagModel] = None
 
         # ChromaDB persistence path
-        # Use absolute path for HuggingFace Spaces, relative for local dev
+        # Use /tmp for HuggingFace Spaces (only writable directory), relative for local dev
         is_hf_spaces = os.getenv("SPACE_ID") is not None
-        default_path = "/app/chroma_db" if is_hf_spaces else "./chroma_db"
+        default_path = "/tmp/chroma_db" if is_hf_spaces else "./chroma_db"
         self.db_path = os.getenv("CHROMA_DB_PATH", default_path)
 
     def _connect(self):

@@ -594,8 +594,8 @@ def setup_directories():
     is_hf_spaces = os.getenv("SPACE_ID") is not None
 
     if is_hf_spaces:
-        # In HuggingFace Spaces, create directories at /app
-        directories = ["/app/chroma_db", "/app/data"]
+        # Use /tmp for HuggingFace Spaces (only writable directory)
+        directories = ["/tmp/chroma_db", "/tmp/data"]
     else:
         # Local development
         directories = ["./chroma_db", "./data"]

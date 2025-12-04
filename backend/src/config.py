@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # Storage Configuration
-    storage_base_path: str = "/app/data" if os.getenv("SPACE_ID") else "./data"
+    storage_base_path: str = "/tmp/data" if os.getenv("SPACE_ID") else "./data"
 
     # Agent Configuration
     max_parallel_extractions: int = 3
