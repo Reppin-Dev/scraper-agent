@@ -2,7 +2,7 @@
 from typing import Optional, Callable, Any
 from urllib.parse import urlparse
 
-from ..models import ScrapeRequest, SessionStatus
+from ..models import ScrapeRequest, SessionStatus, ScrapeMode
 from ..services import SessionManager, session_manager, HTTPClient
 from ..services.sitemap_discovery import SitemapDiscovery
 from ..services.html_cleaner import html_cleaner
@@ -31,11 +31,13 @@ class OrchestratorAgent:
         session_id: Optional[str] = None,
         progress_callback: Optional[Callable[[str, Any], None]] = None,
     ) -> tuple[str, bool]:
-        """Execute Phase 1: Sitemap-based scraping with markdown conversion.
+        """Execute Phase 1: Scraping with markdown conversion.
 
         This method:
-        1. Discovers URLs from robots.txt → sitemaps
-        2. Scrapes raw HTML from all discovered URLs
+        1. Discovers URLs based on mode:
+           - SINGLE_PAGE: Uses only the provided URL
+           - WHOLE_SITE: Discovers URLs from robots.txt → sitemaps
+        2. Scrapes raw HTML from discovered URL(s)
         3. Converts HTML to markdown (NO Claude - using BeautifulSoup)
         4. Saves both raw HTML and markdown
 
@@ -78,26 +80,36 @@ class OrchestratorAgent:
                 progress_callback, "status_update", {"status": "in_progress"}
             )
 
-            # Step 1: Discover URLs from robots.txt → sitemaps
-            domain = self._extract_domain(str(request.url))
-            self._send_progress(
-                progress_callback, "discovering_urls", {"domain": domain}
-            )
-
-            urls = await self.sitemap_discovery.discover_from_robots(domain)
-
-            if not urls:
-                await self._handle_error(
-                    session_id, "No URLs discovered from sitemaps"
-                )
+            # Step 1: Discover URLs (conditional based on mode)
+            if request.mode == ScrapeMode.SINGLE_PAGE:
+                # Single page mode: only scrape the exact URL provided
+                urls = [str(request.url)]
                 self._send_progress(
-                    progress_callback, "error", {"message": "No URLs found in sitemaps"}
+                    progress_callback,
+                    "single_page_mode",
+                    {"url": str(request.url), "message": "Single page mode - scraping only the specified URL"}
                 )
-                return session_id, False
+            else:
+                # Whole site mode: discover from robots.txt → sitemaps
+                domain = self._extract_domain(str(request.url))
+                self._send_progress(
+                    progress_callback, "discovering_urls", {"domain": domain}
+                )
 
-            self._send_progress(
-                progress_callback, "urls_discovered", {"count": len(urls), "urls": urls[:5]}
-            )
+                urls = await self.sitemap_discovery.discover_from_robots(domain)
+
+                if not urls:
+                    await self._handle_error(
+                        session_id, "No URLs discovered from sitemaps"
+                    )
+                    self._send_progress(
+                        progress_callback, "error", {"message": "No URLs found in sitemaps"}
+                    )
+                    return session_id, False
+
+                self._send_progress(
+                    progress_callback, "urls_discovered", {"count": len(urls), "urls": urls[:5]}
+                )
 
             # Set total_pages in metadata after URL discovery
             await self.session_manager.update_progress(
