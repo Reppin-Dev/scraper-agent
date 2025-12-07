@@ -486,16 +486,19 @@ with gr.Blocks(title="Agentic Scraper") as demo:  # DEPRECATED: was "Reppin' Ass
         url_input = gr.Textbox(
             label="Enter URL to Scrape",
             placeholder="https://example.com",
-            scale=4,
+            scale=6,
             elem_classes="url-input-box"
         )
+        
         scrape_btn = gr.Button("Start Scraping", variant="primary", scale=1)
 
     # Mode selection radio
     mode_radio = gr.Radio(
         choices=["single-page", "whole-site"],
         value="whole-site",
-        label="Scraping Mode",
+        label="Scrape Mode",
+        show_label=True,
+        scale=1,
         info="Single-page: scrape only this URL | Whole-site: crawl entire website",
         elem_classes="mode-radio"
     )
