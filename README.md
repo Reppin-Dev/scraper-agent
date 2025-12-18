@@ -3,10 +3,7 @@ title: Agentic Scraper
 emoji: 🤖
 colorFrom: yellow
 colorTo: red
-sdk: gradio
-sdk_version: "6.0.1"
-app_file: frontend/app.py
-python_version: "3.11"
+sdk: docker
 pinned: false
 ---
 
@@ -22,25 +19,25 @@ Scraper Agent combines web scraping, vector search, and Claude AI to enable natu
 
 - **Intelligent Web Scraping**: Sitemap-based discovery with Playwright browser automation
 - **AI-Powered Extraction**: Claude Sonnet 4 for structured data extraction
-- **Vector Search**: BGE-M3 embeddings (1024-dim) with Milvus vector database
+- **Vector Search**: Cohere embed-v4.0 (1536-dim) with ChromaDB vector database
 - **RAG Q&A Pipeline**: 3-stage retrieval-augmented generation for accurate answers
-- **Real-time Progress**: WebSocket updates and animated progress tracking
+- **LLM Provider Choice**: Switch between Claude and Ollama (Kimi K2) via UI toggle
+- **Real-time Progress**: Animated progress tracking
 - **Web Interface**: Gradio-based UI with automatic workflow orchestration
 
 ### Architecture
 
 ```
 ┌─────────────┐      ┌──────────────┐      ┌─────────────┐
-│   Frontend  │ ───> │    Backend   │ ───> │   Milvus    │
-│  (Gradio)   │ HTTP │  (FastAPI)   │ Vec  │  (Docker)   │
-│  Port 7860  │ <─── │  Port 8000   │ <─── │ Port 19530  │
-└─────────────┘      └──────────────┘      └─────────────┘
-                            │
-                            v
-                     ┌──────────────┐
-                     │   Claude AI  │
-                     │ (Sonnet 4)   │
-                     └──────────────┘
+│   Frontend  │      │   Cohere     │      │  ChromaDB   │
+│  (Gradio)   │ ───> │  embed/rank  │ ───> │  (local)    │
+│  Port 7860  │      └──────────────┘      └─────────────┘
+└─────────────┘               │
+       │                      v
+       │              ┌──────────────┐
+       └────────────> │   LLM API    │
+                      │ Claude/Ollama│
+                      └──────────────┘
 ```
 
 ---
@@ -50,8 +47,10 @@ Scraper Agent combines web scraping, vector search, and Claude AI to enable natu
 ### Prerequisites
 
 - **Python 3.11+**
-- **Docker & Docker Compose** (for Milvus vector database)
-- **Anthropic API Key** ([Get one here](https://console.anthropic.com/))
+- **Docker & Docker Compose**
+- **Cohere API Key** ([Get one here](https://dashboard.cohere.com/)) - Required for embeddings
+- **Anthropic API Key** ([Get one here](https://console.anthropic.com/)) - For Claude provider
+- **Ollama** (optional) - For local/cloud Kimi K2 provider
 
 ### Installation
 
@@ -156,36 +155,39 @@ curl -X POST http://localhost:8000/api/query/ask \
 - Stores content in structured JSON format
 
 ### 2. Embedding Phase
-- Chunks markdown content (4000 chars, 200 overlap)
-- Generates BGE-M3 vector embeddings (1024-dimensional)
-- Stores vectors in Milvus with metadata
-- Creates HNSW index for fast similarity search
+- Chunks markdown content (4000 chars max)
+- Generates Cohere embed-v4.0 embeddings (1536-dimensional)
+- Stores vectors in ChromaDB with metadata
+- Uses HNSW index for fast similarity search
 
 ### 3. Q&A Phase (RAG Pipeline)
-- **Stage 1**: Query optimization with Claude Haiku
-- **Stage 2**: Vector similarity search in Milvus
-- **Stage 3**: Answer synthesis with Claude Sonnet 4
+- **Stage 1**: Query optimization with Claude Haiku or Kimi K2
+- **Stage 2**: Vector similarity search + Cohere rerank-v4.0-fast
+- **Stage 3**: Answer synthesis with Claude Sonnet or Kimi K2
 - Returns natural language answer with source citations
 
 ---
 
 ## Technology Stack
 
+### AI & Embeddings
+- **Cohere embed-v4.0** - Text embeddings (1536-dim)
+- **Cohere rerank-v4.0-fast** - Result reranking
+- **Claude Sonnet/Haiku** - Anthropic LLM (default)
+- **Ollama Kimi K2** - Alternative LLM (local/cloud)
+
 ### Backend
-- **FastAPI** - Async REST API framework
-- **Anthropic Claude** - AI models (Sonnet 4, Haiku)
-- **Milvus** - Vector database for embeddings
-- **BGE-M3** - Embedding model (BAAI/bge-m3)
+- **ChromaDB** - Vector database (persistent, local)
 - **Playwright** - Browser automation
 - **BeautifulSoup** - HTML parsing
+- **Pydantic** - Data validation
 
 ### Frontend
 - **Gradio 6.0+** - Python web UI framework
-- **httpx** - Async HTTP client
-- Server-side rendering (no JavaScript build process)
+- Single-process architecture (HuggingFace Spaces compatible)
 
 ### Infrastructure
-- **Docker Compose** - Milvus stack (etcd, MinIO, Milvus)
+- **Docker** - Containerized deployment
 - **Python 3.11+** - Runtime environment
 
 ---
@@ -218,31 +220,30 @@ scraper-agent/
 
 ## Configuration
 
-### Backend Environment Variables
+### Environment Variables
 
-Create `backend/.env`:
+Create `.env` in the root directory:
 ```bash
 # Required
-ANTHROPIC_API_KEY=sk-ant-your-key-here
+COHERE_API_KEY=your-cohere-key        # Required for embeddings/reranking
 
-# Optional (defaults shown)
-HOST=0.0.0.0
-PORT=8000
-DEBUG=False
-MILVUS_HOST=localhost
-MILVUS_PORT=19530
-STORAGE_BASE_PATH=./data
-```
+# LLM Provider (choose one or both)
+ANTHROPIC_API_KEY=sk-ant-your-key     # For Claude provider
+OLLAMA_HOST=https://ollama.com        # For Ollama cloud (or http://localhost:11434 for local)
+OLLAMA_API_KEY=your-ollama-key        # Required for Ollama cloud
+OLLAMA_MODEL=kimi-k2:1t-cloud         # Ollama model to use
 
-### Frontend Environment Variables
-
-Create `frontend/.env`:
-```bash
-# Optional (defaults shown)
-API_BASE_URL=http://localhost:8000
+# Optional
 GRADIO_SERVER_PORT=7860
-GRADIO_SERVER_NAME=0.0.0.0
 ```
+
+### LLM Provider Options
+
+| Provider | Models | Setup |
+|----------|--------|-------|
+| **Claude** (default) | Haiku + Sonnet | Set `ANTHROPIC_API_KEY` |
+| **Ollama Local** | Kimi K2 | Run `ollama serve`, set `OLLAMA_HOST=http://localhost:11434` |
+| **Ollama Cloud** | Kimi K2 | Set `OLLAMA_HOST=https://ollama.com` + `OLLAMA_API_KEY` |
 
 ---
 

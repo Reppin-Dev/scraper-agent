@@ -12,6 +12,17 @@ class Settings(BaseSettings):
     # Anthropic API Configuration
     anthropic_api_key: str = ""  # Required - set via ANTHROPIC_API_KEY env var
 
+    # Cohere API Configuration
+    cohere_api_key: str = ""  # Required - set via COHERE_API_KEY env var
+
+    # Ollama Configuration
+    ollama_host: str = "http://localhost:11434"  # Local Ollama by default
+    ollama_api_key: str = ""  # Only needed for Ollama Cloud
+    ollama_model: str = "kimi-k2:1t-cloud"
+
+    # LLM Provider Selection ("claude" or "ollama")
+    llm_provider: str = "claude"
+
     # Server Configuration
     host: str = "0.0.0.0"
     port: int = 8000
@@ -23,6 +34,7 @@ class Settings(BaseSettings):
     # Agent Configuration
     max_parallel_extractions: int = 3
     default_timeout: int = 30
+    browser_timeout: int = 60  # Playwright page load timeout in seconds
 
     # Model Configuration
     model_config = SettingsConfigDict(

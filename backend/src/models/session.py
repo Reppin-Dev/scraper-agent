@@ -42,6 +42,6 @@ class Session(BaseModel):
 
     metadata: SessionMetadata
     request_data: Dict[str, Any]
-    schema: Optional[Dict[str, Any]] = None
+    data_schema: Optional[Dict[str, Any]] = Field(default=None, alias="schema")
     extracted_data: Optional[Dict[str, Any]] = None
     sources: List[str] = Field(default_factory=list)

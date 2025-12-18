@@ -1,36 +1,18 @@
-"""Vector database service using ChromaDB with BGE-M3 embeddings and ZeroGPU acceleration."""
+"""Vector database service using Cohere Embed v4 + Rerank v4 with ChromaDB storage."""
 import os
 import hashlib
-# Disable HuggingFace progress bars and multiprocessing before any imports
-os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
-os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
-os.environ['OMP_NUM_THREADS'] = '1'
-os.environ['MKL_NUM_THREADS'] = '1'
-os.environ['OPENBLAS_NUM_THREADS'] = '1'
-
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Callable
+import cohere
 import chromadb
 from chromadb.config import Settings
 
 from ..config import settings
 from ..utils.logger import logger
 
-# Try to import spaces for ZeroGPU, but don't fail if not available (local dev)
-try:
-    import spaces
-    HAS_ZEROGPU = True
-except ImportError:
-    HAS_ZEROGPU = False
-    # Create a no-op decorator for local development
-    class spaces:
-        @staticmethod
-        def GPU(func):
-            return func
 
-
-class VectorServiceChroma:
-    """Service for embedding and vector search with ChromaDB + BGE-M3."""
+class VectorServiceCohere:
+    """Service for embedding and vector search with Cohere APIs + ChromaDB."""
 
     def __init__(
         self,
@@ -50,55 +32,72 @@ class VectorServiceChroma:
         self.collection = None
         self.connected = False
 
-        # BGE-M3 model for dense embeddings
-        self.model: Optional[BGEM3FlagModel] = None
+        # Cohere client and models
+        self.co: Optional[cohere.Client] = None
+        self.embed_model = "embed-v4.0"
+        self.rerank_model = "rerank-v4.0-fast"
+        self.dimensions = 1536  # Cohere embed-v4.0 default
 
-        # Embedding cache to avoid redundant computations
+        # For API compatibility with old interface
+        self.model = None
+
+        # Embedding cache to avoid redundant API calls
         self._embedding_cache: Dict[str, List[float]] = {}
-        self._cache_max_size = 1000  # Max cached embeddings
+        self._cache_max_size = 1000
 
         # ChromaDB persistence path
-        # Use /tmp for HuggingFace Spaces (only writable directory), relative for local dev
         is_hf_spaces = os.getenv("SPACE_ID") is not None
         default_path = "/tmp/chroma_db" if is_hf_spaces else "./chroma_db"
         self.db_path = os.getenv("CHROMA_DB_PATH", default_path)
 
-    def _get_cache_key(self, text: str) -> str:
-        """Generate cache key from text hash.
+    def _init_cohere(self):
+        """Initialize Cohere client lazily."""
+        if self.co is None:
+            api_key = settings.cohere_api_key
+            if not api_key:
+                raise ValueError("COHERE_API_KEY environment variable is required")
+            self.co = cohere.Client(api_key=api_key)
+            logger.info("Cohere client initialized")
+
+    def _get_cache_key(self, text: str, input_type: str = "search_document") -> str:
+        """Generate cache key from text hash and input type.
 
         Args:
             text: Text to hash
+            input_type: Cohere input type
 
         Returns:
             MD5 hash string
         """
-        return hashlib.md5(text.encode()).hexdigest()
+        return hashlib.md5(f"{text}:{input_type}".encode()).hexdigest()
 
-    def _get_cached_embedding(self, text: str) -> Optional[List[float]]:
+    def _get_cached_embedding(self, text: str, input_type: str = "search_document") -> Optional[List[float]]:
         """Get embedding from cache if available.
 
         Args:
             text: Text to look up
+            input_type: Cohere input type
 
         Returns:
             Cached embedding or None
         """
-        cache_key = self._get_cache_key(text)
+        cache_key = self._get_cache_key(text, input_type)
         return self._embedding_cache.get(cache_key)
 
-    def _cache_embedding(self, text: str, embedding: List[float]) -> None:
+    def _cache_embedding(self, text: str, embedding: List[float], input_type: str = "search_document") -> None:
         """Store embedding in cache.
 
         Args:
             text: Original text
             embedding: Computed embedding
+            input_type: Cohere input type
         """
         # Evict oldest entry if cache is full (simple FIFO)
         if len(self._embedding_cache) >= self._cache_max_size:
             oldest_key = next(iter(self._embedding_cache))
             del self._embedding_cache[oldest_key]
 
-        cache_key = self._get_cache_key(text)
+        cache_key = self._get_cache_key(text, input_type)
         self._embedding_cache[cache_key] = embedding
 
     def _connect(self):
@@ -122,108 +121,152 @@ class VectorServiceChroma:
             raise
 
     def load_model(self):
-        """Load BGE-M3 embedding model."""
-        if self.model is None:
-            try:
-                # Import FlagEmbedding only when needed (lazy import)
-                from FlagEmbedding import BGEM3FlagModel
+        """Initialize Cohere client (API-based, no local model).
 
-                # Set PyTorch threads to 1 to prevent segfaults in Docker
-                import torch
-                import time
-                torch.set_num_threads(1)
-
-                logger.info("=" * 60)
-                logger.info("Loading BGE-M3 embedding model...")
-                logger.info("This may take 2-5 minutes on first run (downloading ~2GB)")
-                logger.info("=" * 60)
-
-                start_time = time.time()
-                self.model = BGEM3FlagModel('BAAI/bge-m3', use_fp16=True)
-                elapsed = time.time() - start_time
-
-                logger.info(f"✓ BGE-M3 model loaded successfully in {elapsed:.1f}s")
-            except Exception as e:
-                logger.error(f"✗ Failed to load BGE-M3 model: {e}", exc_info=True)
-                raise
+        This method exists for API compatibility with the BGE-M3 version.
+        """
+        self._init_cohere()
+        self.model = True  # Set to truthy value for compatibility checks
+        logger.info("=" * 60)
+        logger.info("Using Cohere embed-v4.0 API (no local model needed)")
+        logger.info("Embedding: embed-v4.0 | Reranking: rerank-v4.0-fast")
+        logger.info("=" * 60)
 
     def create_collection(self, dim: int = 1024):
         """Create or get ChromaDB collection.
 
         Args:
-            dim: Dimension of dense embeddings (BGE-M3 uses 1024) - ignored in ChromaDB
+            dim: Dimension of dense embeddings (1024 for Cohere) - ignored in ChromaDB
         """
         # Ensure connected
         self._connect()
 
         try:
-            # Get or create collection with cosine similarity (equivalent to IP for normalized vectors)
+            # Get or create collection with cosine similarity
             self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
-                metadata={"hnsw:space": "cosine"}  # Cosine similarity
+                metadata={"hnsw:space": "cosine"}
             )
-            logger.info(f"Collection '{self.collection_name}' ready (ChromaDB)")
+            logger.info(f"Collection '{self.collection_name}' ready (ChromaDB + Cohere)")
         except Exception as e:
             logger.error(f"Failed to create/get collection: {e}")
             raise
 
-    @spaces.GPU if HAS_ZEROGPU else lambda f: f
-    def embed_text(self, text: str) -> Tuple[List[float], Dict[str, float]]:
-        """Embed text using BGE-M3 with GPU acceleration and caching.
+    def embed_text(self, text: str, input_type: str = "search_document") -> Tuple[List[float], Dict[str, float]]:
+        """Embed text using Cohere API with caching.
 
         Args:
             text: Text to embed
+            input_type: "search_document" for indexing, "search_query" for queries
 
         Returns:
-            Tuple of (dense_vector, sparse_vector_dict)
-            Note: sparse_vector_dict is empty for ChromaDB (kept for compatibility)
+            Tuple of (dense_vector, empty_dict_for_compatibility)
         """
         # Check cache first
-        cached = self._get_cached_embedding(text)
+        cached = self._get_cached_embedding(text, input_type)
         if cached is not None:
             return cached, {}
 
-        if self.model is None:
-            self.load_model()
+        # Initialize Cohere if needed
+        self._init_cohere()
 
-        # BGE-M3 returns dense, sparse, and colbert embeddings
-        # We'll use dense for ChromaDB
-        embeddings = self.model.encode(
-            [text],
-            return_dense=True,
-            return_sparse=False,  # Don't need sparse for ChromaDB
-            return_colbert_vecs=False
-        )
+        try:
+            response = self.co.embed(
+                texts=[text],
+                model=self.embed_model,
+                input_type=input_type,
+                embedding_types=["float"],
+                truncate="END"
+            )
+            embedding = list(response.embeddings.float_[0])
 
-        dense_vector = embeddings['dense_vecs'][0].tolist()
-        sparse_vector = {}  # Empty dict for compatibility
+            # Cache the result
+            self._cache_embedding(text, embedding, input_type)
 
-        # Cache the result
-        self._cache_embedding(text, dense_vector)
+            return embedding, {}
+        except Exception as e:
+            logger.error(f"Cohere embed failed: {e}")
+            raise
 
-        return dense_vector, sparse_vector
-
-    @spaces.GPU if HAS_ZEROGPU else lambda f: f
-    def _embed_batch(self, texts: List[str]) -> List[List[float]]:
-        """Embed multiple texts in batch (GPU-accelerated).
+    def _embed_batch(self, texts: List[str], input_type: str = "search_document") -> List[List[float]]:
+        """Embed multiple texts in batch using Cohere API.
 
         Args:
             texts: List of texts to embed
+            input_type: "search_document" for indexing, "search_query" for queries
 
         Returns:
             List of dense vectors
         """
-        if self.model is None:
-            self.load_model()
+        if not texts:
+            return []
 
-        embeddings = self.model.encode(
-            texts,
-            return_dense=True,
-            return_sparse=False,
-            return_colbert_vecs=False
-        )
+        # Initialize Cohere if needed
+        self._init_cohere()
 
-        return embeddings['dense_vecs'].tolist()
+        all_embeddings = []
+        batch_size = 96  # Cohere limit
+
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+
+            try:
+                response = self.co.embed(
+                    texts=batch,
+                    model=self.embed_model,
+                    input_type=input_type,
+                    embedding_types=["float"],
+                    truncate="END"
+                )
+                batch_embeddings = [list(e) for e in response.embeddings.float_]
+                all_embeddings.extend(batch_embeddings)
+
+                logger.debug(f"Embedded batch {i // batch_size + 1}: {len(batch)} texts")
+            except Exception as e:
+                logger.error(f"Cohere batch embed failed: {e}")
+                raise
+
+        return all_embeddings
+
+    def rerank(self, query: str, documents: List[str], top_n: int = 10) -> List[Dict[str, Any]]:
+        """Rerank documents by relevance to query using Cohere.
+
+        Args:
+            query: Search query
+            documents: List of document texts to rerank
+            top_n: Number of top results to return
+
+        Returns:
+            List of dicts with index, text, and score
+        """
+        if not documents:
+            return []
+
+        # Initialize Cohere if needed
+        self._init_cohere()
+
+        try:
+            response = self.co.rerank(
+                query=query,
+                documents=documents,
+                model=self.rerank_model,
+                top_n=min(top_n, len(documents)),
+                return_documents=True
+            )
+
+            results = []
+            for r in response.results:
+                results.append({
+                    "index": r.index,
+                    "text": r.document.text,
+                    "score": r.relevance_score
+                })
+
+            logger.debug(f"Reranked {len(documents)} docs, returning top {len(results)}")
+            return results
+        except Exception as e:
+            logger.error(f"Cohere rerank failed: {e}")
+            raise
 
     def chunk_markdown(self, markdown: str, page_name: str, max_chunk_size: int = 4000) -> List[Dict[str, str]]:
         """Chunk markdown intelligently for embedding.
@@ -312,22 +355,20 @@ class VectorServiceChroma:
             logger.warning(f"No chunks to insert for {page_url}")
             return
 
-        # Load model if needed
-        if self.model is None:
-            self.load_model()
+        # Initialize Cohere if needed
+        self._init_cohere()
 
         # Prepare data for insertion
         ids = []
-        embeddings = []
         metadatas = []
         documents = []
 
         # Extract texts for batch embedding
         texts = [chunk["text"] for chunk in chunks]
 
-        # Batch embed all chunks (GPU-accelerated if available)
-        logger.info(f"Embedding {len(texts)} chunks for {domain}/{page_name}...")
-        embeddings = self._embed_batch(texts)
+        # Batch embed all chunks using Cohere API
+        logger.info(f"Embedding {len(texts)} chunks for {domain}/{page_name} via Cohere API...")
+        embeddings = self._embed_batch(texts, input_type="search_document")
 
         # Prepare for ChromaDB insertion
         for i, chunk in enumerate(chunks):
@@ -366,15 +407,17 @@ class VectorServiceChroma:
     def search(
         self,
         query: str,
-        top_k: int = 20,
+        top_k: int = 30,
+        rerank_top_n: int = 10,
         filter_domain: Optional[str] = None,
         filter_site: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Search for relevant chunks using dense search.
+        """Search for relevant chunks using Cohere embed + rerank.
 
         Args:
             query: Search query
-            top_k: Number of results to return
+            top_k: Number of candidates to retrieve from ChromaDB
+            rerank_top_n: Number of results to return after reranking
             filter_domain: Optional domain filter
             filter_site: Optional site name filter
 
@@ -390,8 +433,11 @@ class VectorServiceChroma:
                 logger.error(f"Collection '{self.collection_name}' does not exist")
                 return []
 
-        # Embed query (GPU-accelerated if available)
-        dense_vec, _ = self.embed_text(query)
+        # Initialize Cohere
+        self._init_cohere()
+
+        # Embed query using search_query input type
+        dense_vec, _ = self.embed_text(query, input_type="search_query")
 
         # Build filter for ChromaDB
         where_filter = {}
@@ -415,24 +461,33 @@ class VectorServiceChroma:
                 where=where_filter if where_filter else None
             )
         except Exception as e:
-            logger.error(f"Search failed: {e}")
+            logger.error(f"ChromaDB search failed: {e}")
             return []
 
-        # Format results to match Milvus format
-        formatted_results = []
-        if results['ids'] and len(results['ids'][0]) > 0:
-            for i in range(len(results['ids'][0])):
-                formatted_results.append({
-                    "chunk_id": results['metadatas'][0][i]["chunk_id"],
-                    "domain": results['metadatas'][0][i]["domain"],
-                    "site_name": results['metadatas'][0][i]["site_name"],
-                    "page_name": results['metadatas'][0][i]["page_name"],
-                    "page_url": results['metadatas'][0][i]["page_url"],
-                    "chunk_text": results['documents'][0][i],
-                    "score": 1.0 - results['distances'][0][i],  # ChromaDB returns distance, convert to similarity
-                })
+        # Check if we got results
+        if not results['ids'] or not results['ids'][0]:
+            logger.info(f"Search for '{query}' returned 0 results")
+            return []
 
-        logger.info(f"Search for '{query}' returned {len(formatted_results)} results")
+        # Rerank results using Cohere
+        documents = results['documents'][0]
+        reranked = self.rerank(query, documents, top_n=rerank_top_n)
+
+        # Map reranked results back to original metadata
+        formatted_results = []
+        for r in reranked:
+            idx = r['index']
+            formatted_results.append({
+                "chunk_id": results['metadatas'][0][idx]["chunk_id"],
+                "domain": results['metadatas'][0][idx]["domain"],
+                "site_name": results['metadatas'][0][idx]["site_name"],
+                "page_name": results['metadatas'][0][idx]["page_name"],
+                "page_url": results['metadatas'][0][idx]["page_url"],
+                "chunk_text": r['text'],
+                "score": r['score'],
+            })
+
+        logger.info(f"Search for '{query}': {top_k} candidates → {len(formatted_results)} reranked results")
         return formatted_results
 
     def delete_by_domain(self, domain: str):
@@ -455,13 +510,13 @@ class VectorServiceChroma:
             raise
 
     def close(self):
-        """Close ChromaDB connection."""
-        # ChromaDB doesn't require explicit cleanup
+        """Close connections."""
         self.collection = None
         self.client = None
         self.connected = False
-        logger.info("ChromaDB connection closed")
+        self.co = None
+        logger.info("Cohere + ChromaDB connections closed")
 
 
 # Global instance
-vector_service = VectorServiceChroma()
+vector_service = VectorServiceCohere()

@@ -1,20 +1,18 @@
-"""Backend src package for scraper-agent."""
-from .config import settings
-from .models import (
+"""Backend package for scraper-agent."""
+from .src import (
+    settings,
     ScrapeRequest,
     ScrapeResponse,
     SessionMetadata,
     SessionStatus,
     ScrapeMode,
     Session,
-)
-from .services import (
     storage_service,
     vector_service,
     session_manager,
     HTTPClient,
+    orchestrator,
 )
-from .agents import orchestrator
 
 __all__ = [
     "settings",

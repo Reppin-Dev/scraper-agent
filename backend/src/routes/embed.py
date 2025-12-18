@@ -117,10 +117,10 @@ async def execute_embed_task(filename: str) -> dict:
                 "total_chunks": 0
             }
 
-        # Initialize vector service and load model
-        logger.info("Loading BGE-M3 embedding model...")
+        # Initialize vector service (Cohere API)
+        logger.info("Initializing Cohere embedding API...")
         vector_service.load_model()
-        logger.info("Model loaded successfully")
+        logger.info("Cohere API ready")
 
         # Create collection
         vector_service.create_collection()

@@ -31,6 +31,8 @@ ENV/
 Thumbs.db
 
 # Runtime data directories
+data/
+chroma_db/
 backend/data/
 backend/etcd_data/
 backend/milvus_data/

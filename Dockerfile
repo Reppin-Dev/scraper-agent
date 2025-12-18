@@ -1,47 +1,60 @@
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies (minimal)
+# Install system dependencies for Playwright + lxml
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
-    curl \
+    libglib2.0-0 \
+    libnss3 \
+    libnspr4 \
+    libdbus-1-3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libatspi2.0-0 \
+    libgtk-3-0 \
+    libxml2-dev \
+    libxslt-dev \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Playwright browsers (optimized - only chromium, no extra deps)
-RUN pip install --no-cache-dir playwright==1.40.0 && \
-    playwright install chromium && \
-    playwright install-deps chromium
+# Copy requirements first (Docker layer caching)
+COPY requirements.txt .
 
-# Copy requirements files first (for better layer caching)
-COPY backend/requirements.txt /app/backend/requirements.txt
-COPY frontend/requirements.txt /app/frontend/requirements.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Python dependencies (backend)
-RUN pip install --no-cache-dir -r /app/backend/requirements.txt
-
-# Install Python dependencies (frontend)
-RUN pip install --no-cache-dir -r /app/frontend/requirements.txt
+# Install Playwright browsers
+RUN playwright install chromium
 
 # Copy application code
-COPY backend /app/backend
-COPY frontend /app/frontend
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
 
-# Create directories for ChromaDB and data persistence
-RUN mkdir -p /app/chroma_db /app/data
+# Create necessary directories
+RUN mkdir -p /tmp/data /tmp/chroma_db
 
-# Copy startup script
-COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+# Environment variables for HF Spaces
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV SPACE_ID=hf-docker
+ENV GRADIO_SERVER_NAME=0.0.0.0
+ENV GRADIO_SERVER_PORT=7860
 
-# Expose ports (Gradio on 7860, FastAPI on 8000)
-EXPOSE 7860 8000
+# Expose HF Spaces default port
+EXPOSE 7860
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:7860/ || exit 1
-
-# Run startup script
-CMD ["/app/start.sh"]
+# Run the Gradio app (single-process)
+CMD ["python", "frontend/app.py"]

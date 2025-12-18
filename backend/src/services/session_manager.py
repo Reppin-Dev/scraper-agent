@@ -28,19 +28,21 @@ class SessionManager:
         self._lock = asyncio.Lock()
 
     async def initialize_session(
-        self, request: ScrapeRequest
+        self, request: ScrapeRequest, session_id: Optional[str] = None
     ) -> tuple[str, SessionMetadata]:
         """Initialize a new scraping session.
 
         Args:
             request: The scraping request
+            session_id: Optional pre-created session ID. If None, generates new one.
 
         Returns:
             Tuple of (session_id, session_metadata)
         """
         async with self._lock:
-            # Generate session ID
-            session_id = self.storage.generate_session_id()
+            # Use provided session_id or generate new one
+            if session_id is None:
+                session_id = self.storage.generate_session_id()
 
             # Create session metadata
             now = datetime.now()

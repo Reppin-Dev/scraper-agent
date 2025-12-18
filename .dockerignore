@@ -12,6 +12,9 @@ build/
 venv/
 env/
 ENV/
+backend/venv/
+frontend/venv/
+.venv/
 
 # IDEs
 .vscode/
@@ -28,6 +31,8 @@ Thumbs.db
 .gitignore
 
 # Data and databases
+data/
+chroma_db/
 backend/chroma_db/
 backend/data/
 *.sqlite3
@@ -49,6 +54,8 @@ Dockerfile.local
 # Environment
 .env
 .env.local
+backend/.env
+frontend/.env
 
 # Documentation
 docs/
