@@ -48,12 +48,7 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
-backend/test_*.py
-backend/tests/
 
-# Development files
-backend/inspect_schema.py
-backend/Gym-Scraping-Instructions.txt
-
-# Documentation/Planning
-Vibe_Agent_Chatbot.md
+# Cleanup analysis (temporary)
+CLEANUP_ANALYSIS.md
+AGENTIC-SCRAPER-APP.md

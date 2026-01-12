@@ -357,46 +357,134 @@ async def start_scraping(url: str, mode: str, progress=gr.Progress()) -> Generat
         logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Session created: {session_id}")
         yield session_id, format_logs(logs)
 
+        # Progress tracking state
+        scrape_state = {"total_urls": 0, "scraped": 0, "phase": "init"}
+        status_line = ""  # Single updating status line
+
+        def make_progress_bar(current: int, total: int, width: int = 25) -> str:
+            """Create ASCII progress bar like [████████░░░░░░░]"""
+            if total == 0:
+                return f"[{'░' * width}]"
+            filled = int(width * current / total)
+            bar = "█" * filled + "░" * (width - filled)
+            pct = int(100 * current / total)
+            return f"{bar} {pct}%"
+
         # Progress callback for real-time updates
         def progress_callback(event_type: str, data: dict):
-            nonlocal logs
+            nonlocal logs, scrape_state, status_line
             timestamp = datetime.now().strftime('%H:%M:%S')
 
+            # Events that UPDATE the status line (in place)
             if event_type == "discovering_urls":
-                msg = f"[{timestamp}] Discovering URLs from {data.get('url', '')}"
+                scrape_state["phase"] = "discovering"
+                status_line = f"🔍 Discovering URLs from sitemap..."
             elif event_type == "scraping_page":
-                msg = f"[{timestamp}] Scraping: {data.get('progress', '')} - {data.get('url', '')[:50]}..."
+                progress_str = data.get('progress', '?/?')
+                try:
+                    current, total = progress_str.split('/')
+                    scrape_state["scraped"] = int(current) - 1  # Currently scraping this one
+                    scrape_state["total_urls"] = int(total)
+                except:
+                    pass
+                bar = make_progress_bar(scrape_state["scraped"], scrape_state["total_urls"])
+                status_line = f"📥 Scraping: {bar} {scrape_state['scraped']}/{scrape_state['total_urls']}"
             elif event_type == "page_scraped":
-                msg = f"[{timestamp}] Scraped page ({data.get('html_length', 0)} chars)"
+                scrape_state["scraped"] = scrape_state.get("scraped", 0) + 1
+                bar = make_progress_bar(scrape_state["scraped"], scrape_state["total_urls"])
+                status_line = f"📥 Scraping: {bar} {scrape_state['scraped']}/{scrape_state['total_urls']}"
             elif event_type == "converting_to_markdown":
-                msg = f"[{timestamp}] Converting {data.get('total_pages', 0)} pages to markdown"
+                scrape_state["phase"] = "converting"
+                scrape_state["converted"] = 0
+                scrape_state["convert_total"] = data.get('total_pages', 0)
+                status_line = f"📝 Converting to markdown..."
+            elif event_type == "converting_page":
+                progress_str = data.get('progress', '?/?')
+                try:
+                    current, total = progress_str.split('/')
+                    scrape_state["converted"] = int(current)
+                    scrape_state["convert_total"] = int(total)
+                except:
+                    pass
+                bar = make_progress_bar(scrape_state["converted"], scrape_state["convert_total"])
+                status_line = f"📝 Converting: {bar} {scrape_state['converted']}/{scrape_state['convert_total']}"
             elif event_type == "page_converted":
-                msg = f"[{timestamp}] Converted: {data.get('page_name', '')}"
+                scrape_state["converted"] = scrape_state.get("converted", 0) + 1
+                bar = make_progress_bar(scrape_state["converted"], scrape_state.get("convert_total", 1))
+                status_line = f"📝 Converting: {bar} {scrape_state['converted']}/{scrape_state.get('convert_total', '?')}"
             elif event_type == "saving_session":
-                msg = f"[{timestamp}] Saving session data..."
+                status_line = f"💾 Saving session data..."
+
+            # Events that ADD a permanent log line
+            elif event_type == "urls_discovered":
+                count = data.get('count', 0)
+                scrape_state["total_urls"] = count
+                scrape_state["phase"] = "scraping"
+                logs.append(f"[{timestamp}] ✓ Found {count} URLs to scrape")
+                status_line = f"📥 Scraping: {make_progress_bar(0, count)} 0/{count}"
+            elif event_type == "single_page_mode":
+                scrape_state["total_urls"] = 1
+                scrape_state["phase"] = "scraping"
+                logs.append(f"[{timestamp}] 📄 Single page mode")
+                status_line = f"📥 Scraping: {make_progress_bar(0, 1)} 0/1"
+            elif event_type == "page_error":
+                url_short = data.get('url', '')[:50]
+                logs.append(f"[{timestamp}] ⚠ Failed: {url_short}")
             elif event_type == "completed":
-                msg = f"[{timestamp}] Scraping completed!"
+                total = data.get('total_urls', scrape_state['total_urls'])
+                scraped = data.get('scraped_pages', scrape_state['scraped'])
+                status_line = f"✅ Complete! {scraped}/{total} pages scraped"
             elif event_type == "error":
-                msg = f"[{timestamp}] Error: {data.get('message', 'Unknown error')}"
-            else:
-                msg = f"[{timestamp}] {event_type}: {data}"
+                logs.append(f"[{timestamp}] ❌ {data.get('message', 'Error')}")
+                status_line = f"❌ Error occurred"
 
-            logs = [msg] + logs[:9]
+        # Track state for yielding updates
+        last_status = ""
+        scrape_done = False
+        scrape_result = [None, False]  # [session_id, success]
 
-        # Execute scraping directly
-        result_session_id, success = await orchestrator.execute_scrape(
-            request=request,
-            session_id=session_id,
-            progress_callback=progress_callback
-        )
+        def build_display():
+            """Build display with status line on top, then logs"""
+            lines = []
+            if status_line:
+                lines.append(f">>> {status_line}")
+                lines.append("")  # Blank line separator
+            lines.extend(logs)
+            return format_logs(lines)
 
-        if success:
-            logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Scraping complete!")
+        async def run_scrape():
+            nonlocal scrape_done, scrape_result
+            result_session_id, success = await orchestrator.execute_scrape(
+                request=request,
+                session_id=session_id,
+                progress_callback=progress_callback
+            )
+            scrape_result = [result_session_id, success]
+            scrape_done = True
+
+        # Start scrape as background task
+        scrape_task = asyncio.create_task(run_scrape())
+
+        # Poll and yield updates while scraping
+        while not scrape_done:
+            current_display = build_display()
+            if current_display != last_status:
+                last_status = current_display
+                yield session_id, current_display
+            await asyncio.sleep(0.1)  # Poll every 100ms for smoother updates
+
+        # Wait for task to fully complete
+        await scrape_task
+
+        # Final result
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        if scrape_result[1]:  # success
+            logs.append(f"[{timestamp}] ✅ Scraping complete!")
             progress(1.0, desc="Scraping complete")
-            yield session_id, format_logs(logs)
         else:
-            logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Scraping failed")
-            yield None, format_logs(logs)
+            logs.append(f"[{timestamp}] ❌ Scraping failed")
+
+        yield session_id if scrape_result[1] else None, build_display()
 
     except Exception as e:
         logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Error: {str(e)}")
@@ -450,14 +538,23 @@ async def start_embedding(session_id: Optional[str]) -> Generator[str, None, Non
             return
 
         # Initialize Cohere API
-        logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Connecting to Cohere API...")
+        logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🔌 Connecting to Cohere API...")
         yield format_logs(logs)
 
         vector_service.load_model()
         vector_service.create_collection()
 
-        logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Connected to Cohere, processing {len(pages)} pages...")
+        total_pages = len(pages)
+        logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] ✓ Connected to Cohere, {total_pages} pages to embed")
         yield format_logs(logs)
+
+        # Progress bar helper
+        def make_progress_bar(current: int, total: int, width: int = 20) -> str:
+            if total == 0:
+                return f"[{'░' * width}]"
+            filled = int(width * current / total)
+            bar = "█" * filled + "░" * (width - filled)
+            return f"[{bar}]"
 
         # Process pages
         total_chunks = 0
@@ -487,10 +584,13 @@ async def start_embedding(session_id: Optional[str]) -> Generator[str, None, Non
             total_chunks += len(chunks)
             pages_processed += 1
 
-            logs = [f"[{datetime.now().strftime('%H:%M:%S')}] Embedded: {page_name} ({len(chunks)} chunks)"] + logs[:9]
+            bar = make_progress_bar(pages_processed, total_pages)
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            logs = [f"[{timestamp}] {bar} Embedded {pages_processed}/{total_pages}: {page_name} ({len(chunks)} chunks)"] + logs[:9]
             yield format_logs(logs)
 
-        logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Embedding complete! {pages_processed} pages, {total_chunks} chunks")
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        logs.insert(0, f"[{timestamp}] ✅ Embedding complete! {pages_processed} pages, {total_chunks} total chunks")
         yield format_logs(logs)
 
     except Exception as e:
