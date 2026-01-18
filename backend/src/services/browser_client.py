@@ -11,13 +11,22 @@ from ..utils.logger import logger
 class BrowserClient:
     """Headless browser client using Playwright for JavaScript rendering."""
 
-    def __init__(self, timeout: Optional[int] = None):
+    def __init__(
+        self,
+        timeout: Optional[int] = None,
+        page_load_delay: float = 0.5,  # Reduced from 1.0 for faster scraping
+        scroll_delay: float = 0.5      # Reduced from 1.0 for faster scraping
+    ):
         """Initialize the browser client.
 
         Args:
             timeout: Page load timeout in seconds. Defaults to settings browser_timeout
+            page_load_delay: Delay after page load for JS to execute (default 0.5s)
+            scroll_delay: Delay after scrolling for lazy-load content (default 0.5s)
         """
         self.timeout = (timeout or settings.browser_timeout) * 1000  # Convert to ms
+        self.page_load_delay = page_load_delay
+        self.scroll_delay = scroll_delay
         self._browser: Optional[Browser] = None
 
     async def __aenter__(self):
@@ -72,7 +81,7 @@ class BrowserClient:
         # Strategy 2: Press Escape key (works for many modals)
         try:
             await page.keyboard.press('Escape')
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.15)  # Reduced from 0.3
             logger.debug("Pressed Escape key")
         except Exception as e:
             logger.debug(f"Escape key press failed: {e}")
@@ -126,7 +135,7 @@ class BrowserClient:
                         await elements.first.click(timeout=timeout * 1000, force=True)
                         dismissed_count += 1
                         logger.info(f"Dismissed modal using selector: {selector}")
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(0.2)  # Reduced from 0.5
                         break  # Exit selector loop on success
                 except Exception as e:
                     # Selector not found or click failed, continue
@@ -135,7 +144,7 @@ class BrowserClient:
 
             # Brief pause between attempts
             if attempt < max_attempts - 1:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.2)  # Reduced from 0.5
 
         # Strategy 4: Click on modal overlays/backdrops
         overlay_selectors = [
@@ -153,7 +162,7 @@ class BrowserClient:
                     await elements.first.click(timeout=1000)
                     dismissed_count += 1
                     logger.info(f"Clicked overlay: {selector}")
-                    await asyncio.sleep(0.3)
+                    await asyncio.sleep(0.15)  # Reduced from 0.3
             except Exception as e:
                 logger.debug(f"Overlay click failed for '{selector}': {e}")
                 continue
@@ -169,7 +178,7 @@ class BrowserClient:
         return dismissed_count
 
     async def render_page(
-        self, url: str, wait_for: str = "networkidle", dismiss_modals: bool = True
+        self, url: str, wait_for: str = "domcontentloaded", dismiss_modals: bool = True
     ) -> tuple[str, Optional[str]]:
         """Render a page with full JavaScript execution.
 
@@ -192,13 +201,13 @@ class BrowserClient:
             # Navigate to URL
             await page.goto(url, wait_until=wait_for, timeout=self.timeout)
 
-            # Wait a bit for any delayed JavaScript
-            await asyncio.sleep(1)
+            # Wait for any delayed JavaScript (configurable, default 0.5s)
+            await asyncio.sleep(self.page_load_delay)
 
             # Dismiss modal popups before scrolling
             if dismiss_modals:
                 try:
-                    await self._dismiss_modals(page, timeout=3, max_attempts=3)
+                    await self._dismiss_modals(page, timeout=2, max_attempts=2)  # Reduced from 3
                 except Exception as e:
                     logger.warning(f"Modal dismissal failed: {e}")
                     # Continue with scraping even if modal dismissal fails
@@ -208,7 +217,7 @@ class BrowserClient:
                 async () => {
                     await new Promise((resolve) => {
                         let totalHeight = 0;
-                        const distance = 100;
+                        const distance = 200;  // Faster scroll: 200px instead of 100px
                         const timer = setInterval(() => {
                             const scrollHeight = document.body.scrollHeight;
                             window.scrollBy(0, distance);
@@ -217,13 +226,13 @@ class BrowserClient:
                                 clearInterval(timer);
                                 resolve();
                             }
-                        }, 100);
+                        }, 50);  // Faster interval: 50ms instead of 100ms
                     });
                 }
             """)
 
-            # Wait for any lazy-loaded content to render
-            await asyncio.sleep(1)
+            # Wait for any lazy-loaded content to render (configurable, default 0.5s)
+            await asyncio.sleep(self.scroll_delay)
 
             # Scroll back to top
             await page.evaluate("window.scrollTo(0, 0)")

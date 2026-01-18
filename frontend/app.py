@@ -1,48 +1,90 @@
-"""Gradio frontend for web scraping and Q&A system."""
+"""Gradio frontend for web scraping and Q&A system - Single Process for HuggingFace Spaces."""
 import asyncio
 import os
-import time
+import sys
 from datetime import datetime
 from typing import Optional, List, Tuple, Generator
-import httpx
+from pathlib import Path
+
 import gradio as gr
 from dotenv import load_dotenv
 
+# Add backend to path for direct imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Get the directory where this script is located (for asset paths)
+SCRIPT_DIR = Path(__file__).parent.resolve()
+
 load_dotenv()
 
-API_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+# Import backend services directly (no subprocess)
+from backend.src.config import settings
+from backend.src.models import ScrapeRequest, ScrapeMode, SessionStatus
+from backend.src.services import storage_service, vector_service, session_manager
+from backend.src.agents import orchestrator
+import anthropic
+import ollama
+from huggingface_hub import InferenceClient
 
 custom_css = """
 /* Global theme colors */
 .gradio-container {
-    background-color: #0E172A !important;
+    background-color: #252523 !important;
     color: #F7F7FA !important;
+    padding-left: max(0px, calc((100% - 800px) / 2)) !important;
+    padding-right: max(0px, calc((100% - 800px) / 2)) !important;
 }
 body {
-    background-color: #0E172A !important;
+    background-color: #252523 !important;
 }
-/* Logo styling */
-#logo-image {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin: 0 auto 20px auto;
+
+/* ============================================
+   GLASSMORPHISM STYLES
+   ============================================ */
+
+/* Wavy animated background */
+.gradio-container::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -2;
+    background: linear-gradient(135deg, #252523 0%, #1a1a1a 50%, #252523 100%);
 }
-#logo-image img {
-    max-width: 300px;
-    height: auto;
-    display: block;
-    margin: 0 auto;
+
+/* SVG wave animation layer */
+.gradio-container::after {
+    content: '';
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 250px;
+    z-index: -1;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='%23C6603F' fill-opacity='0.12' d='M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,154.7C960,171,1056,181,1152,165.3C1248,149,1344,107,1392,85.3L1440,64L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'%3E%3Canimate attributeName='d' dur='10s' repeatCount='indefinite' values='M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,154.7C960,171,1056,181,1152,165.3C1248,149,1344,107,1392,85.3L1440,64L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z;M0,64L48,96C96,128,192,192,288,192C384,192,480,128,576,128C672,128,768,192,864,213.3C960,235,1056,213,1152,181.3C1248,149,1344,107,1392,85.3L1440,64L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z;M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,154.7C960,171,1056,181,1152,165.3C1248,149,1344,107,1392,85.3L1440,64L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'/%3E%3C/path%3E%3C/svg%3E") no-repeat bottom center;
+    background-size: cover;
+    opacity: 0.7;
+    pointer-events: none;
 }
+
+/* Glass log containers */
 .log-container {
     max-height: 200px;
     overflow-y: auto;
     font-family: 'Courier New', monospace;
     font-size: 13px;
-    background: #1a1a1a;
+    /* Glassmorphism */
+    background: rgba(26, 26, 26, 0.7) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
     padding: 12px;
-    border-radius: 6px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
 }
+
 .log-entry {
     padding: 4px 8px;
     margin: 2px 0;
@@ -58,6 +100,17 @@ body {
     from { opacity: 0; transform: translateY(-5px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* Animated gradient border on focus */
+@keyframes borderGlow {
+    0%, 100% { border-color: rgba(198, 96, 63, 0.3); }
+    50% { border-color: rgba(198, 96, 63, 0.6); }
+}
+
+.log-container:focus-within {
+    animation: borderGlow 2s ease-in-out infinite;
+}
+
 .status-box {
     padding: 12px;
     border-radius: 6px;
@@ -67,6 +120,7 @@ body {
 .status-in_progress { background: #cfe2ff; color: #084298; }
 .status-completed { background: #d1e7dd; color: #0f5132; }
 .status-failed { background: #f8d7da; color: #842029; }
+
 /* Override Gradio default text colors */
 .gr-markdown, .gr-textbox label, .gr-button, h1, h2, h3, p {
     color: #F7F7FA !important;
@@ -75,14 +129,151 @@ body {
 .message.user, .user, [data-testid="user"], .message-wrap.user {
     color: #61A6FB !important;
 }
-/* Primary button styling */
+
+/* Glass buttons */
 button.primary, .primary {
-    background-color: #61A6FB !important;
-    border-color: #61A6FB !important;
+    background: linear-gradient(135deg, rgba(198, 96, 63, 0.9), rgba(177, 78, 49, 0.9)) !important;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 15px rgba(198, 96, 63, 0.3);
+    color: #FFFFFF !important;
+    transition: all 0.3s ease;
 }
 button.primary:hover, .primary:hover {
-    background-color: #4a8fd9 !important;
-    border-color: #4a8fd9 !important;
+    background: linear-gradient(135deg, rgba(177, 78, 49, 1), rgba(156, 62, 35, 1)) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(198, 96, 63, 0.4);
+}
+
+/* Glass form containers */
+.form {
+    background: rgba(38, 38, 36, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    /* backdrop-filter removed to fix dropdown issues */
+}
+
+/* Glass block containers */
+.block,
+.block.url-input-box {
+    background: rgba(38, 38, 36, 0.5) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    /* backdrop-filter removed to fix dropdown issues */
+}
+
+/* Glass panels/groups */
+.gr-group, .gr-box {
+    background: rgba(38, 38, 36, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 16px;
+    /* backdrop-filter removed to fix dropdown issues */
+}
+
+/* Glass inputs */
+.url-input-box textarea,
+.url-input-box input,
+.block.url-input-box textarea,
+.block.url-input-box input,
+.question-input textarea,
+.question-input input,
+.block.question-input textarea,
+.block.question-input input {
+    background: rgba(31, 30, 29, 0.8) !important;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* All textbox inputs */
+.gradio-container textarea,
+.gradio-container input[type="text"] {
+    background: rgba(31, 30, 29, 0.8) !important;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 20px !important;
+    transition: all 0.3s ease;
+}
+
+.gradio-container textarea:focus,
+.gradio-container input[type="text"]:focus {
+    border-color: rgba(198, 96, 63, 0.6) !important;
+    box-shadow: 0 0 15px rgba(198, 96, 63, 0.15);
+}
+
+/* Question input container */
+.block.question-input {
+    background: rgba(38, 38, 36, 0.5) !important;
+}
+
+/* Glass example buttons */
+.example,
+.example-content {
+    background: rgba(31, 30, 29, 0.7) !important;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+/* Glass chatbot container */
+.chatbot {
+    background: rgba(26, 26, 26, 0.5) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+}
+
+/* Subtle glow on section headers */
+.gr-markdown h3 {
+    text-shadow: 0 0 20px rgba(198, 96, 63, 0.3);
+}
+
+/* ============================================
+   DROPDOWN FIX - Ensure dropdowns can expand
+   ============================================ */
+/* Allow dropdown options to overflow outside containers */
+.gr-accordion,
+.accordion,
+.gr-group,
+.gr-box,
+.form,
+.block,
+.row,
+[class*="row"],
+[class*="group"] {
+    overflow: visible !important;
+}
+
+/* Dropdown options list - ensure it appears above everything */
+ul[role="listbox"],
+div[role="listbox"],
+.options,
+[class*="options"],
+[class*="listbox"] {
+    z-index: 9999 !important;
+    overflow: visible !important;
+}
+
+/* ============================================
+   BROWSER COMPATIBILITY FALLBACKS
+   ============================================ */
+@supports not (backdrop-filter: blur(10px)) {
+    .log-container {
+        background: rgba(26, 26, 26, 0.95) !important;
+    }
+    .form, .block, .gr-group, .gr-box {
+        background: rgba(38, 38, 36, 0.95) !important;
+    }
+    .gradio-container textarea,
+    .gradio-container input[type="text"] {
+        background: rgba(31, 30, 29, 0.95) !important;
+    }
 }
 """
 
@@ -103,209 +294,559 @@ def format_logs(logs_list: List[str]) -> str:
     return html
 
 
-async def start_scraping(url: str, progress=gr.Progress()) -> Generator[Tuple[Optional[str], str], None, None]:
-    """Poll scraping session for progress updates."""
+def normalize_url(url: str) -> str:
+    """Normalize user URL input to a valid URL with scheme.
+
+    Handles:
+    - https://www.website.com (unchanged)
+    - www.website.com -> https://www.website.com
+    - website.com -> https://website.com
+    - domain.website.com -> https://domain.website.com
+    """
+    if not url:
+        return url
+
+    url = url.strip()
+
+    # Already has a scheme
+    if url.startswith(('http://', 'https://')):
+        return url
+
+    # Add https:// prefix
+    return f'https://{url}'
+
+
+async def start_scraping(url: str, mode: str, progress=gr.Progress()) -> Generator[Tuple[Optional[str], str], None, None]:
+    """Execute scraping directly using orchestrator (no HTTP calls)."""
     if not url or not url.strip():
         yield None, format_logs(["Error: URL is required"])
         return
+
+    # Normalize URL (add https:// if missing)
+    url = normalize_url(url)
+
+    # Show info notification
+    gr.Info(f"Scraping started for {url}")
 
     logs = []
     session_id = None
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Starting scrape of {url}")
-            yield None, format_logs(logs)
+        # Clear ChromaDB before starting new scrape
+        try:
+            vector_service.clear_collection()
+            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cleared vector database")
+        except Exception as e:
+            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Warning: Failed to clear vectors: {e}")
 
-            # Start scrape
-            response = await client.post(
-                f"{API_URL}/api/scrape",
-                json={
-                    "url": url,
-                    "mode": "whole-site",
-                    "purpose": "Web scraping for Q&A"
-                }
-            )
-            response.raise_for_status()
-            data = response.json()
-            session_id = data.get("session_id")
-
-            if not session_id:
-                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Error: No session ID received")
-                yield None, format_logs(logs)
-                return
-
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Session created: {session_id}")
-            yield session_id, format_logs(logs)
-
-            # Poll for progress
-            max_attempts = 600  # 10 minutes max
-            attempt = 0
-
-            while attempt < max_attempts:
-                try:
-                    resp = await client.get(f"{API_URL}/api/sessions/{session_id}")
-                    resp.raise_for_status()
-                    session_data = resp.json()
-
-                    status = session_data.get("status", "unknown")
-                    pages = session_data.get("pages_scraped") or 0
-                    total = session_data.get("total_pages")
-
-                    # Update logs with progress
-                    if total:
-                        new_log = f"[{datetime.now().strftime('%H:%M:%S')}] Status: {status} | Pages: {pages}/{total}"
-                    else:
-                        new_log = f"[{datetime.now().strftime('%H:%M:%S')}] Status: {status} | Pages scraped: {pages}"
-
-                    logs = [new_log] + logs[:9]  # Keep last 10
-
-                    # Update progress bar (use real ratio if total available)
-                    if total and total > 0:
-                        progress_val = min(pages / float(total), 0.99)
-                        progress(progress_val, desc=f"Scraping: {pages}/{total} pages")
-                    else:
-                        progress_val = 0.1 if pages == 0 else min(pages / 50.0, 0.99)
-                        progress(progress_val, desc=f"Scraping: {status}")
-
-                    if status == "completed":
-                        logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Scraping complete!")
-                        progress(1.0, desc="Scraping complete")
-                        yield session_id, format_logs(logs)
-                        break
-                    elif status == "failed":
-                        error_msg = session_data.get("error_message", "Unknown error")
-                        logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Error: {error_msg}")
-                        yield None, format_logs(logs)
-                        break
-
-                    yield session_id, format_logs(logs)
-
-                except httpx.HTTPError as e:
-                    logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] HTTP error: {str(e)}")
-                    yield session_id, format_logs(logs)
-
-                await asyncio.sleep(1)
-                attempt += 1
-
-            if attempt >= max_attempts:
-                logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Timeout: Scraping took too long")
-                yield session_id, format_logs(logs)
-
-    except httpx.HTTPError as e:
-        logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Error: {str(e)}")
+        logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Starting scrape of {url}")
         yield None, format_logs(logs)
+
+        # Create scrape request
+        scrape_mode = ScrapeMode.SINGLE_PAGE if mode == "single-page" else ScrapeMode.WHOLE_SITE
+        request = ScrapeRequest(
+            url=url,
+            mode=scrape_mode,
+            purpose="Web scraping for Q&A"
+        )
+
+        # Generate session ID and create directory
+        session_id = storage_service.generate_session_id()
+        storage_service.create_session_directory(session_id)
+
+        logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Session created: {session_id}")
+        yield session_id, format_logs(logs)
+
+        # Progress tracking state
+        scrape_state = {"total_urls": 0, "scraped": 0, "phase": "init"}
+        status_line = ""  # Single updating status line
+
+        def make_progress_bar(current: int, total: int, width: int = 25) -> str:
+            """Create ASCII progress bar like [████████░░░░░░░]"""
+            if total == 0:
+                return f"[{'░' * width}]"
+            filled = int(width * current / total)
+            bar = "█" * filled + "░" * (width - filled)
+            pct = int(100 * current / total)
+            return f"{bar} {pct}%"
+
+        # Progress callback for real-time updates
+        def progress_callback(event_type: str, data: dict):
+            nonlocal logs, scrape_state, status_line
+            timestamp = datetime.now().strftime('%H:%M:%S')
+
+            # Events that UPDATE the status line (in place)
+            if event_type == "discovering_urls":
+                scrape_state["phase"] = "discovering"
+                status_line = f"🔍 Discovering URLs from sitemap..."
+            elif event_type == "scraping_page":
+                progress_str = data.get('progress', '?/?')
+                try:
+                    current, total = progress_str.split('/')
+                    scrape_state["scraped"] = int(current) - 1  # Currently scraping this one
+                    scrape_state["total_urls"] = int(total)
+                except:
+                    pass
+                bar = make_progress_bar(scrape_state["scraped"], scrape_state["total_urls"])
+                status_line = f"📥 Scraping: {bar} {scrape_state['scraped']}/{scrape_state['total_urls']}"
+            elif event_type == "page_scraped":
+                scrape_state["scraped"] = scrape_state.get("scraped", 0) + 1
+                bar = make_progress_bar(scrape_state["scraped"], scrape_state["total_urls"])
+                status_line = f"📥 Scraping: {bar} {scrape_state['scraped']}/{scrape_state['total_urls']}"
+            elif event_type == "converting_to_markdown":
+                scrape_state["phase"] = "converting"
+                scrape_state["converted"] = 0
+                scrape_state["convert_total"] = data.get('total_pages', 0)
+                status_line = f"📝 Converting to markdown..."
+            elif event_type == "converting_page":
+                progress_str = data.get('progress', '?/?')
+                try:
+                    current, total = progress_str.split('/')
+                    scrape_state["converted"] = int(current)
+                    scrape_state["convert_total"] = int(total)
+                except:
+                    pass
+                bar = make_progress_bar(scrape_state["converted"], scrape_state["convert_total"])
+                status_line = f"📝 Converting: {bar} {scrape_state['converted']}/{scrape_state['convert_total']}"
+            elif event_type == "page_converted":
+                scrape_state["converted"] = scrape_state.get("converted", 0) + 1
+                bar = make_progress_bar(scrape_state["converted"], scrape_state.get("convert_total", 1))
+                status_line = f"📝 Converting: {bar} {scrape_state['converted']}/{scrape_state.get('convert_total', '?')}"
+            elif event_type == "saving_session":
+                status_line = f"💾 Saving session data..."
+
+            # Events that ADD a permanent log line
+            elif event_type == "urls_discovered":
+                count = data.get('count', 0)
+                scrape_state["total_urls"] = count
+                scrape_state["phase"] = "scraping"
+                logs.append(f"[{timestamp}] ✓ Found {count} URLs to scrape")
+                status_line = f"📥 Scraping: {make_progress_bar(0, count)} 0/{count}"
+            elif event_type == "single_page_mode":
+                scrape_state["total_urls"] = 1
+                scrape_state["phase"] = "scraping"
+                logs.append(f"[{timestamp}] 📄 Single page mode")
+                status_line = f"📥 Scraping: {make_progress_bar(0, 1)} 0/1"
+            elif event_type == "page_error":
+                url_short = data.get('url', '')[:50]
+                logs.append(f"[{timestamp}] ⚠ Failed: {url_short}")
+            elif event_type == "completed":
+                total = data.get('total_urls', scrape_state['total_urls'])
+                scraped = data.get('scraped_pages', scrape_state['scraped'])
+                status_line = f"✅ Complete! {scraped}/{total} pages scraped"
+            elif event_type == "error":
+                logs.append(f"[{timestamp}] ❌ {data.get('message', 'Error')}")
+                status_line = f"❌ Error occurred"
+
+        # Track state for yielding updates
+        last_status = ""
+        scrape_done = False
+        scrape_result = [None, False]  # [session_id, success]
+
+        def build_display():
+            """Build display with status line on top, then logs"""
+            lines = []
+            if status_line:
+                lines.append(f">>> {status_line}")
+                lines.append("")  # Blank line separator
+            lines.extend(logs)
+            return format_logs(lines)
+
+        async def run_scrape():
+            nonlocal scrape_done, scrape_result
+            result_session_id, success = await orchestrator.execute_scrape(
+                request=request,
+                session_id=session_id,
+                progress_callback=progress_callback
+            )
+            scrape_result = [result_session_id, success]
+            scrape_done = True
+
+        # Start scrape as background task
+        scrape_task = asyncio.create_task(run_scrape())
+
+        # Poll and yield updates while scraping
+        while not scrape_done:
+            current_display = build_display()
+            if current_display != last_status:
+                last_status = current_display
+                yield session_id, current_display
+            await asyncio.sleep(0.1)  # Poll every 100ms for smoother updates
+
+        # Wait for task to fully complete
+        await scrape_task
+
+        # Final result
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        if scrape_result[1]:  # success
+            logs.append(f"[{timestamp}] ✅ Scraping complete!")
+            progress(1.0, desc="Scraping complete")
+        else:
+            logs.append(f"[{timestamp}] ❌ Scraping failed")
+
+        yield session_id if scrape_result[1] else None, build_display()
+
     except Exception as e:
-        logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Unexpected error: {str(e)}")
+        logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Error: {str(e)}")
         yield None, format_logs(logs)
 
 
 async def start_embedding(session_id: Optional[str]) -> Generator[str, None, None]:
-    """Call embedding API endpoint."""
+    """Execute embedding directly using vector service (no HTTP calls)."""
     if not session_id:
         yield format_logs(["No session to embed"])
         return
+
+    # Show info notification
+    gr.Info("Embedding process started")
 
     logs = []
     logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Starting embedding process...")
     yield format_logs(logs)
 
-    # Wait a moment for file to be written
-    await asyncio.sleep(2)
+    # Wait a moment for files to be written
+    await asyncio.sleep(1)
 
     try:
-        async with httpx.AsyncClient(timeout=300.0) as client:  # 5 minute timeout for embedding
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calling embedding API...")
+        # Find markdown file for this session
+        files = storage_service.list_raw_html_files()
+        matching_files = [f for f in files if session_id in f]
+
+        if not matching_files:
+            logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] No markdown file found for session")
             yield format_logs(logs)
+            return
 
-            # Call the embedding API (now synchronous - waits for completion)
-            response = await client.post(
-                f"{API_URL}/api/embed/",
-                json={"session_id": session_id}
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            # Show results
-            status = data.get("status", "unknown")
-            message = data.get("message", "")
-            total_chunks = data.get("total_chunks", 0)
-            total_pages = data.get("total_pages", 0)
-
-            logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Status: {status}")
-            logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
-            logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Processed {total_pages} pages, {total_chunks} chunks")
-
-            if status == "completed":
-                logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Embedding complete!")
-            else:
-                logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Embedding failed or incomplete")
-
-            yield format_logs(logs)
-
-    except httpx.HTTPError as e:
-        logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] HTTP error: {str(e)}")
+        filename = matching_files[0]
+        logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Found file: {filename}")
         yield format_logs(logs)
+
+        # Load the data
+        data = storage_service.load_raw_html(filename)
+        if not data:
+            logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Failed to load file")
+            yield format_logs(logs)
+            return
+
+        domain = data.get("website", "unknown")
+        site_name = data.get("site_name", "Unknown Site")
+        pages = data.get("pages", [])
+
+        if not pages:
+            logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] No pages found")
+            yield format_logs(logs)
+            return
+
+        # Initialize Cohere API
+        logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🔌 Connecting to Cohere API...")
+        yield format_logs(logs)
+
+        vector_service.load_model()
+        vector_service.create_collection()
+
+        total_pages = len(pages)
+        logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] ✓ Connected to Cohere, {total_pages} pages to embed")
+        yield format_logs(logs)
+
+        # Progress bar helper
+        def make_progress_bar(current: int, total: int, width: int = 20) -> str:
+            if total == 0:
+                return f"[{'░' * width}]"
+            filled = int(width * current / total)
+            bar = "█" * filled + "░" * (width - filled)
+            return f"[{bar}]"
+
+        # Process pages
+        total_chunks = 0
+        pages_processed = 0
+
+        for page_idx, page in enumerate(pages):
+            page_name = page.get("page_name", "Unknown Page")
+            page_url = page.get("page_url", "")
+            markdown_content = page.get("markdown_content", "")
+
+            if not markdown_content:
+                continue
+
+            # Chunk and embed
+            chunks = vector_service.chunk_markdown(markdown_content, page_name)
+            if not chunks:
+                continue
+
+            vector_service.insert_chunks(
+                domain=domain,
+                site_name=site_name,
+                page_name=page_name,
+                page_url=page_url,
+                chunks=chunks,
+            )
+
+            total_chunks += len(chunks)
+            pages_processed += 1
+
+            bar = make_progress_bar(pages_processed, total_pages)
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            logs = [f"[{timestamp}] {bar} Embedded {pages_processed}/{total_pages}: {page_name} ({len(chunks)} chunks)"] + logs[:9]
+            yield format_logs(logs)
+
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        logs.insert(0, f"[{timestamp}] ✅ Embedding complete! {pages_processed} pages, {total_chunks} total chunks")
+        yield format_logs(logs)
+
     except Exception as e:
         logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] Error: {str(e)}")
         yield format_logs(logs)
 
 
-async def chat_fn(message: str, history):
-    """Query the RAG endpoint."""
+def extract_thinking_response(content: str) -> str:
+    """Extract actual response from thinking model output.
+
+    Thinking models like Kimi K2 output in format:
+    <think>reasoning here</think>
+    actual answer here
+
+    This function strips the thinking tags and returns just the answer.
+    """
+    import re
+
+    if not content:
+        return ""
+
+    # Remove <think>...</think> blocks (including multiline)
+    cleaned = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
+
+    # Also try removing <thinking>...</thinking> variant
+    cleaned = re.sub(r'<thinking>.*?</thinking>', '', cleaned, flags=re.DOTALL)
+
+    return cleaned.strip()
+
+
+async def chat_fn(
+    message: str, history,
+    stage1_host: str, stage1_model_claude: str, stage1_model_hf: str,
+    stage1_model_ollama: str, stage1_provider: str, stage1_system_prompt: str,
+    stage3_host: str, stage3_model_claude: str, stage3_model_hf: str,
+    stage3_model_ollama: str, stage3_provider: str, stage3_system_prompt: str,
+    anthropic_key: str, huggingface_key: str, ollama_key: str, cohere_key: str
+):
+    """Query using direct vector search and LLM with per-stage configuration."""
     if not message or not message.strip():
         history.append({"role": "user", "content": message})
         history.append({"role": "assistant", "content": "Please enter a question."})
         return history
 
+    # Resolve model based on host selection
+    def get_model(host, model_claude, model_hf, model_ollama):
+        if host == "Claude":
+            return model_claude
+        elif host == "HuggingFace":
+            return model_hf
+        else:  # Ollama
+            return model_ollama
+
+    stage1_model = get_model(stage1_host, stage1_model_claude, stage1_model_hf, stage1_model_ollama)
+    stage3_model = get_model(stage3_host, stage3_model_claude, stage3_model_hf, stage3_model_ollama)
+
+    # Use UI-provided API keys if available, otherwise fall back to settings
+    effective_anthropic_key = anthropic_key.strip() if anthropic_key else settings.anthropic_api_key
+    effective_hf_key = huggingface_key.strip() if huggingface_key else settings.huggingface_api_key
+    effective_ollama_key = ollama_key.strip() if ollama_key else settings.ollama_api_key
+    effective_cohere_key = cohere_key.strip() if cohere_key else settings.cohere_api_key
+
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            # Build conversation history for the API (exclude current message)
-            conversation_history = history if history else []
+        # Format Stage 1 prompt - replace {original_query} placeholder with actual message
+        query_rewrite_prompt = stage1_system_prompt.replace("{original_query}", message)
 
-            response = await client.post(
-                f"{API_URL}/api/query/ask",
-                json={
-                    "question": message,
-                    "conversation_history": conversation_history,
-                    "top_k": 10
-                }
+        # Stage 1: Query Rewriting
+        if stage1_host == "Claude":
+            print(f"[CHAT] Stage 1: Calling Claude {stage1_model} for query rewriting...")
+            try:
+                client = anthropic.Anthropic(api_key=effective_anthropic_key)
+                query_message = client.messages.create(
+                    model=stage1_model,
+                    max_tokens=100,
+                    messages=[{"role": "user", "content": query_rewrite_prompt}]
+                )
+                optimized_query = query_message.content[0].text.strip()
+                print(f"[CHAT] Stage 1 complete: Query rewritten to '{optimized_query}'")
+            except Exception as e:
+                print(f"[CHAT] Stage 1 FAILED (Claude {stage1_model}): {e}")
+                raise
+
+        elif stage1_host == "HuggingFace":
+            # Build full model ID with provider suffix if specified
+            hf_model = stage1_model
+            if stage1_provider and stage1_provider != "(none)":
+                hf_model = f"{stage1_model}:{stage1_provider}"
+            print(f"[CHAT] Stage 1: Calling HuggingFace {hf_model} for query rewriting...")
+            try:
+                hf_client = InferenceClient(token=effective_hf_key)
+                response = hf_client.chat.completions.create(
+                    model=hf_model,
+                    messages=[{"role": "user", "content": query_rewrite_prompt}],
+                    max_tokens=100
+                )
+                raw_content = response.choices[0].message.content
+                optimized_query = extract_thinking_response(raw_content)
+                if not optimized_query or optimized_query == "...":
+                    optimized_query = message
+                print(f"[CHAT] Stage 1 complete: Query rewritten to '{optimized_query}'")
+            except Exception as e:
+                print(f"[CHAT] Stage 1 FAILED (HuggingFace {hf_model}): {e}")
+                raise
+
+        else:  # Ollama
+            ollama_host = settings.ollama_host
+            print(f"[CHAT] Stage 1: Calling Ollama {stage1_model} at {ollama_host} for query rewriting...")
+            try:
+                if ollama_host == "https://ollama.com":
+                    ollama_client = ollama.Client(
+                        host=ollama_host,
+                        headers={"Authorization": f"Bearer {effective_ollama_key}"}
+                    )
+                else:
+                    ollama_client = ollama.Client(host=ollama_host)
+
+                system_msg = "You are a search query optimizer. Output ONLY the optimized query, nothing else. No explanations, no thinking, just the query."
+                response = ollama_client.chat(
+                    model=stage1_model,
+                    messages=[
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": query_rewrite_prompt}
+                    ],
+                    options={"num_predict": 500}
+                )
+                raw_content = response.message.content
+                optimized_query = extract_thinking_response(raw_content)
+                if not optimized_query or optimized_query == "...":
+                    optimized_query = message
+                print(f"[CHAT] Stage 1 complete: Query rewritten to '{optimized_query}'")
+            except Exception as e:
+                print(f"[CHAT] Stage 1 FAILED (Ollama {stage1_model}): {e}")
+                raise
+
+        # Stage 2: Vector Search + Reranking (Cohere embed + rerank) - always uses Cohere
+        print("[CHAT] Stage 2: Calling Cohere embed-v4.0 + rerank-v4.0-fast...")
+        try:
+            results = vector_service.search(
+                query=optimized_query,
+                top_k=30,
+                rerank_top_n=10
             )
-            response.raise_for_status()
-            data = response.json()
+            print(f"[CHAT] Stage 2 complete: Retrieved {len(results)} results")
+        except Exception as e:
+            print(f"[CHAT] Stage 2 FAILED (Cohere): {e}")
+            raise
 
-        answer = data.get("answer", "No answer available")
-        sources = data.get("sources", [])
+        if not results:
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": "I don't have any information about that. Please scrape a website first, then ask questions about its content."})
+            return history
 
-        # Format with sources
-        if sources:
-            formatted = answer
-            # formatted = f"{answer}\n\n**Sources:**\n"
-            # for i, s in enumerate(sources[:3], 1):
-            #     gym_name = s.get('gym_name', 'Unknown')
-            #     page_name = s.get('page_name', 'Unknown')
-            #     score = s.get('score', 0.0)
-            #     formatted += f"{i}. {gym_name} - {page_name} (relevance: {score:.2f})\n"
-        else:
-            formatted = answer
+        # Build context from results
+        context_parts = []
+        for i, result in enumerate(results, 1):
+            context_parts.append(
+                f"[Source {i} - {result['site_name']} - {result['page_name']}]\n"
+                f"{result['chunk_text']}\n"
+            )
+        context = "\n---\n".join(context_parts)
+
+        # Use custom Stage 3 system prompt
+        system_prompt = stage3_system_prompt
+
+        user_prompt = f"""Based on the following information from websites, please answer this question:
+
+Question: {message}
+
+Relevant Information from Websites:
+{context}
+
+Please provide a natural, helpful answer based on this information."""
+
+        # Stage 3: Answer Synthesis
+        if stage3_host == "Claude":
+            print(f"[CHAT] Stage 3: Calling Claude {stage3_model} for answer synthesis...")
+            try:
+                client = anthropic.Anthropic(api_key=effective_anthropic_key)
+                answer_message = client.messages.create(
+                    model=stage3_model,
+                    max_tokens=1024,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}]
+                )
+                answer = answer_message.content[0].text
+                print("[CHAT] Stage 3 complete: Answer generated")
+            except Exception as e:
+                print(f"[CHAT] Stage 3 FAILED (Claude {stage3_model}): {e}")
+                raise
+
+        elif stage3_host == "HuggingFace":
+            hf_model = stage3_model
+            if stage3_provider and stage3_provider != "(none)":
+                hf_model = f"{stage3_model}:{stage3_provider}"
+            print(f"[CHAT] Stage 3: Calling HuggingFace {hf_model} for answer synthesis...")
+            try:
+                hf_client = InferenceClient(token=effective_hf_key)
+                response = hf_client.chat.completions.create(
+                    model=hf_model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=1024
+                )
+                raw_answer = response.choices[0].message.content
+                answer = extract_thinking_response(raw_answer)
+                if not answer:
+                    answer = "I was unable to generate a response. Please try again."
+                print("[CHAT] Stage 3 complete: Answer generated")
+            except Exception as e:
+                print(f"[CHAT] Stage 3 FAILED (HuggingFace {hf_model}): {e}")
+                raise
+
+        else:  # Ollama
+            ollama_host = settings.ollama_host
+            print(f"[CHAT] Stage 3: Calling Ollama {stage3_model} for answer synthesis...")
+            try:
+                if ollama_host == "https://ollama.com":
+                    ollama_client = ollama.Client(
+                        host=ollama_host,
+                        headers={"Authorization": f"Bearer {effective_ollama_key}"}
+                    )
+                else:
+                    ollama_client = ollama.Client(host=ollama_host)
+
+                response = ollama_client.chat(
+                    model=stage3_model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    options={"num_predict": 4096}
+                )
+                raw_answer = response.message.content
+                answer = extract_thinking_response(raw_answer)
+                if not answer:
+                    answer = "I was unable to generate a response. Please try again."
+                print("[CHAT] Stage 3 complete: Answer generated")
+            except Exception as e:
+                print(f"[CHAT] Stage 3 FAILED (Ollama {stage3_model}): {e}")
+                raise
 
         history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": formatted})
+        history.append({"role": "assistant", "content": answer})
         return history
 
-    except httpx.HTTPError as e:
-        # Check if it's a "no embeddings" error
-        if "404" in str(e) or "not found" in str(e).lower():
-            error_msg = "Please enter your gym website url above, and click 'Start Scraping'."
+    except Exception as e:
+        error_str = str(e)
+        if "no embeddings" in error_str.lower() or "not found" in error_str.lower():
+            error_msg = "Please enter a website URL above and click 'Start Scraping'."
         else:
-            error_msg = f"Error querying the system: {str(e)}"
+            error_msg = f"Error querying the system: {error_str}"
 
         history.append({"role": "user", "content": message})
         history.append({"role": "assistant", "content": error_msg})
-        return history
-    except Exception as e:
-        history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": f"Unexpected error: {str(e)}"})
         return history
 
 
@@ -322,38 +863,36 @@ def handle_feedback(data: gr.LikeData):
     feedback_type = "liked" if data.liked else "disliked"
     message_index = data.index
     message_value = data.value
-
     print(f"[FEEDBACK] User {feedback_type} message at index {message_index}")
     print(f"[FEEDBACK] Message content: {message_value}")
 
 
-async def handle_example_click(evt: gr.SelectData, history):
+async def handle_example_click(
+    evt: gr.SelectData, history,
+    stage1_host: str, stage1_model_claude: str, stage1_model_hf: str,
+    stage1_model_ollama: str, stage1_provider: str, stage1_system_prompt: str,
+    stage3_host: str, stage3_model_claude: str, stage3_model_hf: str,
+    stage3_model_ollama: str, stage3_provider: str, stage3_system_prompt: str,
+    anthropic_key: str, huggingface_key: str, ollama_key: str, cohere_key: str
+):
     """Handle when user clicks an example question."""
-    # Extract the example text from the SelectData
     example_text = evt.value.get("text", "")
-    # Call the chat function with the example text
-    return await chat_fn(example_text, history)
+    return await chat_fn(
+        example_text, history,
+        stage1_host, stage1_model_claude, stage1_model_hf,
+        stage1_model_ollama, stage1_provider, stage1_system_prompt,
+        stage3_host, stage3_model_claude, stage3_model_hf,
+        stage3_model_ollama, stage3_provider, stage3_system_prompt,
+        anthropic_key, huggingface_key, ollama_key, cohere_key
+    )
 
 
 # Build Gradio interface
-with gr.Blocks(title="Reppin' Assistant") as demo:
+with gr.Blocks(title="Agentic Scraper") as demo:
     gr.HTML(f"<style>{custom_css}</style>")
 
-    # Logo - using gr.Image for better Gradio integration
-    with gr.Row():
-        with gr.Column():
-            gr.Image(
-                value="/Users/arshveergahir/Desktop/GitHub Repos/scraper-agent/frontend/reppin-logo.png",
-                show_label=False,
-                container=False,
-                height=100,
-                elem_id="logo-image",
-                buttons=None,
-                interactive=False
-            )
-
-    gr.HTML("<h1>Reppin' <span style='color: #61A6FB;'>Assistant</span></h1>")
-    gr.Markdown("Register your gym, or find new ones through our agent")
+    gr.HTML("<h1>Agentic <span style='color: #C6603F;'>Scraper</span></h1>")
+    gr.Markdown("Scrape any website and ask questions powered by Claude/HuggingFace/Ollama AI and Cohere embeddings")
 
     # State
     session_id_state = gr.State(None)
@@ -362,9 +901,217 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
         url_input = gr.Textbox(
             label="Enter URL to Scrape",
             placeholder="https://example.com",
-            scale=4
+            scale=6,
+            elem_classes="url-input-box"
         )
         scrape_btn = gr.Button("Start Scraping", variant="primary", scale=1)
+
+    # Mode selection radio
+    mode_radio = gr.Radio(
+        choices=["single-page", "whole-site"],
+        value="whole-site",
+        label="Scrape Mode",
+        show_label=True,
+        scale=1,
+        info="Single-page: scrape only this URL | Whole-site: crawl entire website",
+        elem_classes="mode-radio"
+    )
+
+    # Advanced LLM Settings Accordion
+    with gr.Accordion("Advanced LLM Settings", open=False):
+        gr.Markdown("### Stage 1 (Query Optimization)")
+        with gr.Row():
+            stage1_host = gr.Dropdown(
+                choices=["Claude", "HuggingFace", "Ollama"],
+                value="Claude",
+                label="Host",
+                scale=1,
+                interactive=True
+            )
+            stage1_model_claude = gr.Dropdown(
+                choices=["claude-3-5-haiku-20241022", "claude-sonnet-4-20250514"],
+                value="claude-3-5-haiku-20241022",
+                label="Model",
+                visible=True,
+                scale=2,
+                interactive=True,
+                allow_custom_value=True
+            )
+            stage1_model_hf = gr.Dropdown(
+                choices=["moonshotai/Kimi-K2-Instruct", "Qwen/Qwen3-235B-A22B", "deepseek-ai/DeepSeek-R1-0528"],
+                value="moonshotai/Kimi-K2-Instruct",
+                label="Model",
+                visible=False,
+                scale=2,
+                interactive=True,
+                allow_custom_value=True
+            )
+            stage1_model_ollama = gr.Dropdown(
+                choices=["kimi-k2-thinking:cloud", "kimi-k2:1t-cloud"],
+                value="kimi-k2-thinking:cloud",
+                label="Model",
+                visible=False,
+                scale=2,
+                interactive=True,
+                allow_custom_value=True
+            )
+            stage1_provider = gr.Dropdown(
+                choices=["(none)", "fastest", "cheapest", "together", "nebius", "novita", "groq", "sambanova", "cohere", "cerebras", "nscale", "hyperbolic", "scaleway"],
+                value="(none)",
+                label="Provider",
+                visible=False,
+                scale=1,
+                interactive=True,
+                allow_custom_value=True
+            )
+        stage1_system_prompt = gr.TextArea(
+            value="""Given this user question about websites, rewrite it as an optimized search query.
+
+User Question: {original_query}
+
+Instructions:
+- Extract key concepts and keywords
+- Add relevant synonyms and related terms
+- Keep it concise (2-10 words)
+- Focus on terms likely to appear in website content
+- Do not add quotes or special characters
+
+Return ONLY the optimized search query, nothing else.""",
+            label="Stage 1 System Prompt",
+            visible=True,
+            lines=4,
+            max_lines=4,
+            scale=1,
+            interactive=True
+        )
+
+        gr.Markdown("### Stage 3 (Answer Synthesis)")
+        with gr.Row():
+            stage3_host = gr.Dropdown(
+                choices=["Claude", "HuggingFace", "Ollama"],
+                value="Claude",
+                label="Host",
+                scale=1,
+                interactive=True
+            )
+            stage3_model_claude = gr.Dropdown(
+                choices=["claude-3-5-haiku-20241022", "claude-sonnet-4-20250514"],
+                value="claude-sonnet-4-20250514",
+                label="Model",
+                visible=True,
+                scale=2,
+                interactive=True,
+                allow_custom_value=True
+            )
+            stage3_model_hf = gr.Dropdown(
+                choices=["moonshotai/Kimi-K2-Instruct", "Qwen/Qwen3-235B-A22B", "deepseek-ai/DeepSeek-R1-0528"],
+                value="moonshotai/Kimi-K2-Instruct",
+                label="Model",
+                visible=False,
+                scale=2,
+                interactive=True,
+                allow_custom_value=True
+            )
+            stage3_model_ollama = gr.Dropdown(
+                choices=["kimi-k2-thinking:cloud", "kimi-k2:1t-cloud"],
+                value="kimi-k2-thinking:cloud",
+                label="Model",
+                visible=False,
+                scale=2,
+                interactive=True,
+                allow_custom_value=True
+            )
+            stage3_provider = gr.Dropdown(
+                choices=["(none)", "fastest", "cheapest", "together", "nebius", "novita", "groq", "sambanova", "cohere", "cerebras", "nscale", "hyperbolic", "scaleway"],
+                value="(none)",
+                label="Provider",
+                visible=False,
+                scale=1,
+                interactive=True,
+                allow_custom_value=True
+            )
+        stage3_system_prompt = gr.TextArea(
+            value="""You are a helpful assistant answering questions about websites.
+
+You will be provided with relevant information extracted from websites. Use this information to answer the user's question accurately and naturally.
+
+Guidelines:
+- Provide a clear, concise answer based ONLY on the information given
+- If multiple sites are mentioned, organize the information clearly
+- Include specific details like addresses, prices, class types, hours when available
+- If the provided information doesn't fully answer the question, acknowledge what you can answer
+- Be conversational and helpful
+- Cite site names when providing specific information
+- Don't make up information not present in the sources""",
+            label="Stage 3 System Prompt",
+            visible=True,
+            lines=4,
+            max_lines=4,
+            scale=1,
+            interactive=True
+        )
+
+        gr.Markdown("### API Keys")
+        with gr.Row():
+            anthropic_key = gr.Textbox(
+                label="Anthropic API Key",
+                type="password",
+                placeholder="sk-ant-...",
+                scale=2
+            )
+            gr.HTML('<a href="https://console.anthropic.com/settings/keys" target="_blank" style="color: #C6603F;">Get key</a>')
+        with gr.Row():
+            huggingface_key = gr.Textbox(
+                label="HuggingFace API Key",
+                type="password",
+                placeholder="hf_...",
+                scale=2
+            )
+            gr.HTML('<a href="https://huggingface.co/settings/tokens" target="_blank" style="color: #C6603F;">Get key</a>')
+        with gr.Row():
+            ollama_key = gr.Textbox(
+                label="Ollama API Key (for cloud)",
+                type="password",
+                placeholder="(optional for local)",
+                scale=2
+            )
+        with gr.Row():
+            cohere_key = gr.Textbox(
+                label="Cohere API Key (required)",
+                type="password",
+                placeholder="...",
+                scale=2
+            )
+            gr.HTML('<a href="https://dashboard.cohere.com/api-keys" target="_blank" style="color: #C6603F;">Get key</a>')
+
+    # Event handlers for conditional visibility
+    def update_stage1_visibility(host):
+        return (
+            gr.update(visible=(host == "Claude")),
+            gr.update(visible=(host == "HuggingFace")),
+            gr.update(visible=(host == "Ollama")),
+            gr.update(visible=(host == "HuggingFace"))
+        )
+
+    def update_stage3_visibility(host):
+        return (
+            gr.update(visible=(host == "Claude")),
+            gr.update(visible=(host == "HuggingFace")),
+            gr.update(visible=(host == "Ollama")),
+            gr.update(visible=(host == "HuggingFace"))
+        )
+
+    stage1_host.change(
+        fn=update_stage1_visibility,
+        inputs=[stage1_host],
+        outputs=[stage1_model_claude, stage1_model_hf, stage1_model_ollama, stage1_provider]
+    )
+
+    stage3_host.change(
+        fn=update_stage3_visibility,
+        inputs=[stage3_host],
+        outputs=[stage3_model_claude, stage3_model_hf, stage3_model_ollama, stage3_provider]
+    )
 
     # Progress Section
     with gr.Group():
@@ -382,26 +1129,27 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
     chatbot = gr.Chatbot(
         label="Q&A Assistant",
         height=400,
-        avatar_images=("assets/user-avatar-dark.png", "assets/bot-avatar-dark.png"),
+        avatar_images=(str(SCRIPT_DIR / "assets/user-avatar-dark.png"), str(SCRIPT_DIR / "assets/bot-avatar-dark.png")),
         feedback_options=["Like", "Dislike"],
         examples=[
-            {"text": "What are some gyms in Toronto that offer Barre?"},
-            {"text": "Which gyms are open 24/7 in Berlin?"},
-            {"text": "Find gyms with swimming pools in Toronto"},
-            {"text": "Which studios offer hot yoga classes in Berlin?"},
-            {"text": "Show me budget-friendly gyms in Toronto"},
-            {"text": "Gyms with childcare services in Berlin?"},
-            {"text": "Are there any gyms with personal training services?"},
-            {"text": "What gyms offer group fitness classes?"}
+            {"text": "What is this website about?"},
+            {"text": "Summarize the main services offered"},
+            {"text": "What are the pricing options?"},
+            {"text": "How can I contact support?"},
+            {"text": "What are the business hours?"},
+            {"text": "Are there any special offers or promotions?"},
+            {"text": "What payment methods are accepted?"},
+            {"text": "What is the return or refund policy?"}
         ]
     )
 
-    with gr.Row():
+    with gr.Row(elem_classes="question-row"):
         msg_input = gr.Textbox(
             label="Your Question",
             placeholder="Ask a question about the scraped content...",
             scale=4,
-            interactive=True
+            interactive=True,
+            elem_classes="question-input"
         )
         send_btn = gr.Button("Send", scale=1, interactive=True)
 
@@ -410,7 +1158,7 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
     # Event Handlers with .then() chaining
     scrape_event = scrape_btn.click(
         fn=start_scraping,
-        inputs=[url_input],
+        inputs=[url_input, mode_radio],
         outputs=[session_id_state, scrape_logs]
     ).then(
         fn=start_embedding,
@@ -421,10 +1169,34 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
         outputs=[msg_input, send_btn]
     )
 
+    # Enter key on URL input triggers scraping (same as clicking the button)
+    url_input.submit(
+        fn=start_scraping,
+        inputs=[url_input, mode_radio],
+        outputs=[session_id_state, scrape_logs]
+    ).then(
+        fn=start_embedding,
+        inputs=[session_id_state],
+        outputs=[embed_logs]
+    ).then(
+        fn=enable_chat,
+        outputs=[msg_input, send_btn]
+    )
+
+    # Chat inputs list (for reuse)
+    chat_inputs = [
+        msg_input, chatbot,
+        stage1_host, stage1_model_claude, stage1_model_hf,
+        stage1_model_ollama, stage1_provider, stage1_system_prompt,
+        stage3_host, stage3_model_claude, stage3_model_hf,
+        stage3_model_ollama, stage3_provider, stage3_system_prompt,
+        anthropic_key, huggingface_key, ollama_key, cohere_key
+    ]
+
     # Chat handlers
     msg_submit = msg_input.submit(
         fn=chat_fn,
-        inputs=[msg_input, chatbot],
+        inputs=chat_inputs,
         outputs=[chatbot]
     ).then(
         fn=lambda: "",
@@ -433,7 +1205,7 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
 
     send_click = send_btn.click(
         fn=chat_fn,
-        inputs=[msg_input, chatbot],
+        inputs=chat_inputs,
         outputs=[chatbot]
     ).then(
         fn=lambda: "",
@@ -445,17 +1217,88 @@ with gr.Blocks(title="Reppin' Assistant") as demo:
     # Feedback handler
     chatbot.like(fn=handle_feedback, inputs=None, outputs=None)
 
-    # Example select handler - when user clicks an example, submit it to chat
+    # Example select inputs (chatbot + all config)
+    example_inputs = [
+        chatbot,
+        stage1_host, stage1_model_claude, stage1_model_hf,
+        stage1_model_ollama, stage1_provider, stage1_system_prompt,
+        stage3_host, stage3_model_claude, stage3_model_hf,
+        stage3_model_ollama, stage3_provider, stage3_system_prompt,
+        anthropic_key, huggingface_key, ollama_key, cohere_key
+    ]
+
+    # Example select handler
     chatbot.example_select(
         fn=handle_example_click,
-        inputs=[chatbot],
+        inputs=example_inputs,
         outputs=[chatbot]
     )
 
+
+def validate_environment():
+    """Check required environment variables before starting."""
+    # Check Anthropic API key (optional, for Claude provider)
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    if anthropic_key and anthropic_key.strip():
+        print(f"[STARTUP] ANTHROPIC_API_KEY is set: {anthropic_key[:15]}...")
+    else:
+        print("[STARTUP] ANTHROPIC_API_KEY not set (Claude provider will not work without UI key)")
+
+    # Check HuggingFace API key (optional, for HuggingFace provider)
+    hf_key = os.getenv("HUGGINGFACE_API_KEY")
+    if hf_key and hf_key.strip():
+        print(f"[STARTUP] HUGGINGFACE_API_KEY is set: {hf_key[:15]}...")
+    else:
+        print("[STARTUP] HUGGINGFACE_API_KEY not set (HuggingFace provider will not work without UI key)")
+
+    # Check Cohere API key (required for embeddings - can be set via env or UI)
+    cohere_key = os.getenv("COHERE_API_KEY")
+    if cohere_key and cohere_key.strip():
+        print(f"[STARTUP] COHERE_API_KEY is set: {cohere_key[:15]}...")
+    else:
+        print("[STARTUP] COHERE_API_KEY not set (can be provided via UI)")
+
+    # Check Ollama configuration (optional, for Ollama provider)
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    ollama_api_key = os.getenv("OLLAMA_API_KEY", "")
+    print(f"[STARTUP] OLLAMA_HOST: {ollama_host}")
+    if ollama_api_key:
+        print(f"[STARTUP] OLLAMA_API_KEY is set: {ollama_api_key[:15]}...")
+    else:
+        print("[STARTUP] OLLAMA_API_KEY not set (required for Ollama Cloud)")
+
+    print("[STARTUP] API keys can be configured via UI in Advanced LLM Settings")
+
+
+def setup_directories():
+    """Create necessary directories for data persistence."""
+    is_hf_spaces = os.getenv("SPACE_ID") is not None
+
+    if is_hf_spaces:
+        directories = ["/tmp/chroma_db", "/tmp/data"]
+    else:
+        directories = ["./chroma_db", "./data"]
+
+    for directory in directories:
+        try:
+            Path(directory).mkdir(parents=True, exist_ok=True)
+            print(f"[STARTUP] Created directory: {directory}")
+        except Exception as e:
+            print(f"[WARNING] Failed to create directory {directory}: {e}")
+
+
 if __name__ == "__main__":
+    # Validate environment before starting
+    validate_environment()
+
+    # Create necessary directories
+    setup_directories()
+
+    # Start Gradio frontend (no subprocess needed!)
+    print("[STARTUP] Starting single-process Gradio app...")
     demo.queue()
     demo.launch(
         server_port=int(os.getenv("GRADIO_SERVER_PORT", 7860)),
         server_name="0.0.0.0",
-        share=True
+        share=False
     )

@@ -6,7 +6,7 @@ import json
 import os
 
 from .config import settings
-from .routes import scrape, sessions, gym_scrape, embed, query
+from .routes import scrape, sessions, embed, query
 from .utils.logger import logger
 
 # Suppress tokenizers parallelism warning
@@ -89,7 +89,6 @@ manager = ConnectionManager()
 
 # Include routers
 app.include_router(scrape.router)
-app.include_router(gym_scrape.router)
 app.include_router(sessions.router)
 app.include_router(embed.router)
 app.include_router(query.router)

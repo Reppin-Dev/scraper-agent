@@ -8,8 +8,14 @@ python-dotenv==1.0.0
 python-multipart==0.0.6
 typer==0.9.0
 rich==13.7.0
-pymilvus==2.3.4
-FlagEmbedding==1.2.3
+# Vector database - migrated to ChromaDB for HuggingFace Spaces
+chromadb>=0.4.0
+# Note: spaces library only works with Gradio SDK, not Docker SDK
+# spaces>=0.1.0  # Not compatible with Docker SDK deployment
+# pymilvus==2.3.4  # Deprecated - replaced by ChromaDB
+# FlagEmbedding==1.2.3  # Replaced by Cohere API
+cohere>=5.0.0
+ollama>=0.4.0
 playwright==1.40.0
 beautifulsoup4==4.12.2
 lxml==4.9.3

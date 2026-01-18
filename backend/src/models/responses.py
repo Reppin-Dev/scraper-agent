@@ -38,7 +38,7 @@ class SessionResponse(BaseModel):
     url: str
     purpose: str
     mode: ScrapeMode
-    schema: Optional[Dict[str, Any]] = None
+    data_schema: Optional[Dict[str, Any]] = Field(default=None, alias="schema")
     extracted_data: Optional[Dict[str, Any]] = None
     sources: List[str] = Field(default_factory=list)
     error_message: Optional[str] = None

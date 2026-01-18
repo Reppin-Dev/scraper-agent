@@ -1,180 +1,171 @@
-# Scraper Agent
+---
+title: Agentic Scraper
+emoji: 🕷️
+colorFrom: orange
+colorTo: red
+sdk: docker
+pinned: false
+---
 
-AI-powered web scraping system with intelligent content extraction, vector embeddings, and natural language Q&A capabilities.
+# Agentic Scraper
 
-## Overview
+Scrape any website and chat with its content using AI.
 
-Scraper Agent combines web scraping, vector search, and Claude AI to enable natural language querying of website content. Simply provide a URL, and the system will scrape the site, generate embeddings, and allow you to ask questions about the content.
+![Scraping Interface](docs/images/agentic-scraper-01-main.png)
 
-### Key Features
-
-- **Intelligent Web Scraping**: Sitemap-based discovery with Playwright browser automation
-- **AI-Powered Extraction**: Claude Sonnet 4 for structured data extraction
-- **Vector Search**: BGE-M3 embeddings (1024-dim) with Milvus vector database
-- **RAG Q&A Pipeline**: 3-stage retrieval-augmented generation for accurate answers
-- **Real-time Progress**: WebSocket updates and animated progress tracking
-- **Web Interface**: Gradio-based UI with automatic workflow orchestration
-
-### Architecture
-
-```
-┌─────────────┐      ┌──────────────┐      ┌─────────────┐
-│   Frontend  │ ───> │    Backend   │ ───> │   Milvus    │
-│  (Gradio)   │ HTTP │  (FastAPI)   │ Vec  │  (Docker)   │
-│  Port 7860  │ <─── │  Port 8000   │ <─── │ Port 19530  │
-└─────────────┘      └──────────────┘      └─────────────┘
-                            │
-                            v
-                     ┌──────────────┐
-                     │   Claude AI  │
-                     │ (Sonnet 4)   │
-                     └──────────────┘
-```
+![Chat Interface](docs/images/agentic-scraper-02-chat.png)
 
 ---
 
-## Quick Start
+## Quickstart
 
-### Prerequisites
+> **Requirements:** Python 3.11+
 
-- **Python 3.11+**
-- **Docker & Docker Compose** (for Milvus vector database)
-- **Anthropic API Key** ([Get one here](https://console.anthropic.com/))
+### 1. Clone & Setup
 
-### Installation
-
-1. **Clone the repository:**
 ```bash
-git clone <repository-url>
+git clone https://github.com/yourusername/scraper-agent.git
 cd scraper-agent
-```
 
-2. **Start Milvus (Vector Database):**
-```bash
-cd backend
-docker-compose up -d
-```
+# Create virtual environment
+python3 -m venv venv
 
-3. **Set up Backend:**
-```bash
-cd backend
-python3.11 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Activate it
+source venv/bin/activate        # Mac/Linux
+# venv\Scripts\activate         # Windows
+
+# Install dependencies
 pip install -r requirements.txt
 playwright install chromium
-
-# Configure environment
-cp .env.example .env
-# Edit .env and add: ANTHROPIC_API_KEY=sk-ant-...
-
-# Start backend server
-python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-4. **Set up Frontend:**
+### 2. Get API Keys
+
+You'll need API keys from these services (free tiers available):
+
+| Service | Get Key | Required? |
+|---------|---------|-----------|
+| **Cohere** | [dashboard.cohere.com](https://dashboard.cohere.com/api-keys) | Yes (embeddings) |
+| **Anthropic** | [console.anthropic.com](https://console.anthropic.com/) | Pick one |
+| **HuggingFace** | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) | Pick one |
+| **Ollama** | [ollama.com](https://ollama.com/) | Pick one |
+
+### 3. Configure
+
 ```bash
-cd ../frontend
-python3.11 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# Configure environment (optional)
 cp .env.example .env
-
-# Start frontend
-python app.py
 ```
 
-5. **Access the application:**
-   - **Frontend UI**: http://localhost:7860
-   - **Backend API**: http://localhost:8000
-   - **API Docs**: http://localhost:8000/docs
+Open `.env` in any text editor and add your keys:
+
+```bash
+# Required - for embeddings
+COHERE_API_KEY=paste-your-cohere-key-here
+
+# Pick one LLM provider:
+ANTHROPIC_API_KEY=sk-ant-...      # Claude (recommended)
+# or
+HUGGINGFACE_API_KEY=hf_...        # HuggingFace
+# or
+OLLAMA_API_KEY=...                # Ollama Cloud
+```
+
+### 4. Run
+
+```bash
+python frontend/app.py
+```
+
+Open http://localhost:7860 in your browser.
 
 ---
 
 ## Usage
 
-### Web Interface (Recommended)
+### Web UI
 
-1. Open http://localhost:7860
-2. Enter a website URL (e.g., `https://example.com`)
-3. Click "Start Scraping" and wait for completion
-4. Embedding generation starts automatically
-5. Chat interface activates when ready
-6. Ask questions about the scraped content!
+1. **Enter URL** - Paste any website URL
+2. **Select Mode**
+   - `single-page`: Scrape only the URL you entered
+   - `whole-site`: Crawl entire site via sitemap
+3. **Click "Start Scraping"** - Watch the progress bar
+4. **Wait for embedding** - Automatic after scraping
+5. **Ask questions** - Use the chat interface or preset buttons
 
-### API Usage
+### FastAPI Mode
 
-**Start Scraping:**
+Run the backend API server:
+
+```bash
+python -m uvicorn backend.src.main:app --host 0.0.0.0 --port 8000
+```
+
+**Endpoints:**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/scrape` | Start scraping a URL |
+| `GET` | `/api/sessions` | List all sessions |
+| `GET` | `/api/sessions/{id}` | Get session details |
+| `POST` | `/api/embed/` | Generate embeddings |
+| `POST` | `/api/query/ask` | Ask a question (RAG) |
+| `GET` | `/health` | Health check |
+
+**Example - Scrape a site:**
+
 ```bash
 curl -X POST http://localhost:8000/api/scrape \
   -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://example.com",
-    "mode": "whole-site",
-    "purpose": "I need the data"
-  }'
+  -d '{"url": "https://example.com", "mode": "whole-site"}'
 ```
 
-**Generate Embeddings:**
-```bash
-curl -X POST http://localhost:8000/api/embed/ \
-  -H "Content-Type: application/json" \
-  -d '{"session_id": "YOUR_SESSION_ID"}'
-```
+**Example - Ask a question:**
 
-**Ask Questions:**
 ```bash
 curl -X POST http://localhost:8000/api/query/ask \
   -H "Content-Type: application/json" \
-  -d '{
-    "question": "What are the business hours?",
-    "top_k": 10
-  }'
+  -d '{"question": "What services are offered?"}'
 ```
+
+API docs available at http://localhost:8000/docs
 
 ---
 
 ## How It Works
 
-### 1. Scraping Phase
-- Discovers URLs via sitemap parsing
-- Fetches pages using Playwright (headless browser)
-- Converts HTML to clean markdown
-- Stores content in structured JSON format
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Scraping   │ --> │  Embedding  │ --> │    Chat     │
+│  Playwright │     │   Cohere    │     │ Claude/HF/  │
+│  + Sitemap  │     │  + ChromaDB │     │   Ollama    │
+└─────────────┘     └─────────────┘     └─────────────┘
+```
 
-### 2. Embedding Phase
-- Chunks markdown content (4000 chars, 200 overlap)
-- Generates BGE-M3 vector embeddings (1024-dimensional)
-- Stores vectors in Milvus with metadata
-- Creates HNSW index for fast similarity search
-
-### 3. Q&A Phase (RAG Pipeline)
-- **Stage 1**: Query optimization with Claude Haiku
-- **Stage 2**: Vector similarity search in Milvus
-- **Stage 3**: Answer synthesis with Claude Sonnet 4
-- Returns natural language answer with source citations
+1. **Scrape**: Discover URLs from sitemap, fetch with Playwright, convert to markdown
+2. **Embed**: Chunk content, generate Cohere embeddings, store in ChromaDB
+3. **Chat**: Vector search + rerank, synthesize answer with LLM
 
 ---
 
-## Technology Stack
+## Configuration
 
-### Backend
-- **FastAPI** - Async REST API framework
-- **Anthropic Claude** - AI models (Sonnet 4, Haiku)
-- **Milvus** - Vector database for embeddings
-- **BGE-M3** - Embedding model (BAAI/bge-m3)
-- **Playwright** - Browser automation
-- **BeautifulSoup** - HTML parsing
+All settings in `.env`:
 
-### Frontend
-- **Gradio 6.0+** - Python web UI framework
-- **httpx** - Async HTTP client
-- Server-side rendering (no JavaScript build process)
+```bash
+# Embeddings (required)
+COHERE_API_KEY=...
 
-### Infrastructure
-- **Docker Compose** - Milvus stack (etcd, MinIO, Milvus)
-- **Python 3.11+** - Runtime environment
+# LLM Providers (pick one)
+ANTHROPIC_API_KEY=...           # Claude
+HUGGINGFACE_API_KEY=...         # HuggingFace Inference
+OLLAMA_API_KEY=...              # Ollama Cloud
+OLLAMA_HOST=http://localhost:11434  # Local Ollama
+
+# Optional
+STORAGE_BASE_PATH=./data
+CHROMA_DB_PATH=./chroma_db
+DEBUG=True
+```
 
 ---
 
@@ -182,178 +173,34 @@ curl -X POST http://localhost:8000/api/query/ask \
 
 ```
 scraper-agent/
-├── backend/              # FastAPI backend
-│   ├── src/
-│   │   ├── agents/      # AI agents (orchestrator, extractors)
-│   │   ├── routes/      # API endpoints
-│   │   ├── services/    # Core services (storage, vector, browser)
-│   │   ├── models/      # Pydantic data models
-│   │   └── main.py      # FastAPI application
-│   ├── data/            # Session storage (runtime)
-│   ├── docker-compose.yml
-│   ├── requirements.txt
-│   └── README.md        # Detailed backend documentation
-│
-├── frontend/            # Gradio frontend
-│   ├── app.py          # Main application
-│   ├── requirements.txt
-│   └── README.md       # Detailed frontend documentation
-│
-└── README.md           # This file
+├── frontend/
+│   └── app.py              # Gradio UI (main entry point)
+├── backend/
+│   └── src/
+│       ├── main.py         # FastAPI server
+│       ├── agents/         # Orchestrator
+│       ├── services/       # Storage, vector, browser
+│       ├── routes/         # API endpoints
+│       └── models/         # Pydantic models
+├── .env.example            # Environment template
+└── requirements.txt        # Dependencies
 ```
 
 ---
 
-## Configuration
+## Tech Stack
 
-### Backend Environment Variables
-
-Create `backend/.env`:
-```bash
-# Required
-ANTHROPIC_API_KEY=sk-ant-your-key-here
-
-# Optional (defaults shown)
-HOST=0.0.0.0
-PORT=8000
-DEBUG=False
-MILVUS_HOST=localhost
-MILVUS_PORT=19530
-STORAGE_BASE_PATH=./data
-```
-
-### Frontend Environment Variables
-
-Create `frontend/.env`:
-```bash
-# Optional (defaults shown)
-API_BASE_URL=http://localhost:8000
-GRADIO_SERVER_PORT=7860
-GRADIO_SERVER_NAME=0.0.0.0
-```
-
----
-
-## Verification & Health Checks
-
-**Check Backend:**
-```bash
-curl http://localhost:8000/health
-```
-
-**Check Milvus:**
-```bash
-curl http://localhost:9091/healthz
-curl http://localhost:8000/api/query/health
-```
-
-**Check All Services:**
-```bash
-docker ps  # Should show etcd, minio, milvus
-```
-
----
-
-## Troubleshooting
-
-### Milvus Connection Issues
-```bash
-cd backend
-docker-compose down
-docker-compose up -d
-docker logs milvus-standalone
-```
-
-### Backend Not Starting
-```bash
-cd backend
-source venv/bin/activate
-pip install -r requirements.txt
-playwright install chromium
-```
-
-### Embedding Failures
-- Verify Milvus is running: `docker ps | grep milvus`
-- Check cleaned markdown exists: `ls backend/data/*/cleaned_markdown/`
-- Review backend logs for BGE-M3 model loading errors
-
-### Frontend Can't Connect
-- Verify backend is running: `curl http://localhost:8000/health`
-- Check `API_BASE_URL` in `frontend/.env`
-- Ensure CORS allows frontend origin (default allows all)
-
----
-
-## Documentation
-
-- **Backend Details**: See `backend/README.md` for comprehensive API documentation, architecture details, and deployment guides
-- **Frontend Details**: See `frontend/README.md` for UI workflow, component architecture, and hosting options
-- **API Reference**: Visit http://localhost:8000/docs for interactive Swagger documentation
-
----
-
-## Development
-
-### Running Tests
-```bash
-cd backend
-pytest
-pytest --cov=src --cov-report=html
-```
-
-### Adding Custom Agents
-Extend `BaseSchemaGenerator` or `BaseContentExtractor` in `backend/src/agents/specialized/`
-
-### Modifying UI
-Edit `frontend/app.py` - all UI components use Gradio's Python API
-
----
-
-## Production Deployment
-
-### Recommended Platforms
-- **Railway** - Native Docker Compose support, easy deployment
-- **Fly.io** - Excellent Docker support, global edge deployment
-- **Render** - Simple Python hosting with persistent volumes
-
-### Key Considerations
-- Set `DEBUG=False` in production
-- Configure CORS with specific allowed origins
-- Add rate limiting (use `slowapi`)
-- Secure API keys with platform secret management
-- Set up health check endpoints
-- Configure Milvus persistent volumes
-
-See `backend/README.md` and `frontend/README.md` for detailed deployment instructions.
-
----
-
-## Important Notes
-
-### Docker Containerization
-- **Milvus ONLY** runs in Docker (via docker-compose.yml)
-- **Backend must run locally** due to PyTorch segmentation fault in containerized environments
-- **Frontend runs locally** as a Gradio server
-
-This hybrid deployment is necessary until the PyTorch Docker issue is resolved.
-
-### Data Persistence
-- Session data stored in `backend/data/`
-- Vector embeddings stored in Milvus (Docker volumes)
-- Ensure persistent volumes configured in production
+| Component | Technology |
+|-----------|------------|
+| **UI** | Gradio |
+| **Scraping** | Playwright + BeautifulSoup |
+| **Embeddings** | Cohere embed-v4.0 |
+| **Vector DB** | ChromaDB (local) |
+| **Reranking** | Cohere rerank-v4.0 |
+| **LLM** | Claude / HuggingFace / Ollama |
 
 ---
 
 ## License
 
 Apache 2.0
-
----
-
-## Support
-
-For detailed troubleshooting, API reference, and advanced configuration:
-- **Backend docs**: `backend/README.md`
-- **Frontend docs**: `frontend/README.md`
-- **API docs**: http://localhost:8000/docs
-- **Check logs**: Backend terminal, Docker logs, browser console

@@ -52,15 +52,15 @@ def list_files_table():
     table = Table(title=f"Available Cleaned Markdown Files ({len(files)})")
     table.add_column("#", style="cyan", no_wrap=True)
     table.add_column("Filename", style="white")
-    table.add_column("Gym/Site", style="green")
+    table.add_column("Site", style="green")  # DEPRECATED: was "Gym/Site"
     table.add_column("Pages", style="yellow", justify="right")
 
     for i, filename in enumerate(files, 1):
         data = storage_service.load_raw_html(filename)
         if data:
-            gym_name = data.get("gym_name", "Unknown")
+            site_name = data.get("site_name", "Unknown")  # DEPRECATED: was gym_name = data.get("gym_name", "Unknown")
             page_count = str(len(data.get("pages", [])))
-            table.add_row(str(i), filename, gym_name, page_count)
+            table.add_row(str(i), filename, site_name, page_count)  # DEPRECATED: was gym_name
         else:
             table.add_row(str(i), filename, "[red]Failed to load[/red]", "-")
 
@@ -94,7 +94,7 @@ def embed_file_with_progress(
         return False, 0
 
     domain = data.get("website", "unknown")
-    gym_name = data.get("gym_name", "Unknown Gym")
+    site_name = data.get("site_name", "Unknown Site")  # DEPRECATED: was gym_name = data.get("gym_name", "Unknown Gym")
     pages = data.get("pages", [])
 
     if not pages:
@@ -142,7 +142,7 @@ def embed_file_with_progress(
         # Insert chunks into Milvus with progress tracking
         vector_service.insert_chunks(
             domain=domain,
-            gym_name=gym_name,
+            site_name=site_name,  # DEPRECATED: was gym_name=gym_name
             page_name=page_name,
             page_url=page_url,
             chunks=chunks,

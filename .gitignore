@@ -1,17 +1,57 @@
+# Environment files (NEVER commit these!)
+.env
+*.env
+!.env.example
+backend/.env
+frontend/.env
 
-# env files
-**/*/.env
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
 
+# Virtual environments
+venv/
+env/
+ENV/
 
-# virtual environments
-**/*/venv
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Runtime data directories
+data/
+chroma_db/
 backend/data/
 backend/etcd_data/
 backend/milvus_data/
 backend/minio_data/
 backend/models/
+backend/chroma_db/
 
 # runtime files
 ingress
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Cleanup analysis (temporary)
+CLEANUP_ANALYSIS.md
+AGENTIC-SCRAPER-APP.md

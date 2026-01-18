@@ -25,6 +25,17 @@ class EmbedResponse(BaseModel):
     total_chunks: Optional[int] = None
 
 
+@router.post("/clear-vectors")
+async def clear_vectors():
+    """Clear all vectors from ChromaDB collection."""
+    try:
+        vector_service.clear_collection()
+        return {"status": "success", "message": "Vector collection cleared"}
+    except Exception as e:
+        logger.error(f"Error clearing vectors: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/embed/", response_model=EmbedResponse)
 async def create_embed_task(
     request: EmbedRequest, background_tasks: BackgroundTasks
@@ -105,7 +116,7 @@ async def execute_embed_task(filename: str) -> dict:
             }
 
         domain = data.get("website", "unknown")
-        gym_name = data.get("gym_name", "Unknown Gym")
+        site_name = data.get("site_name", "Unknown Site")  # DEPRECATED: was gym_name = data.get("gym_name", "Unknown Gym")
         pages = data.get("pages", [])
 
         if not pages:
@@ -117,10 +128,10 @@ async def execute_embed_task(filename: str) -> dict:
                 "total_chunks": 0
             }
 
-        # Initialize vector service and load model
-        logger.info("Loading BGE-M3 embedding model...")
+        # Initialize vector service (Cohere API)
+        logger.info("Initializing Cohere embedding API...")
         vector_service.load_model()
-        logger.info("Model loaded successfully")
+        logger.info("Cohere API ready")
 
         # Create collection
         vector_service.create_collection()
@@ -147,7 +158,7 @@ async def execute_embed_task(filename: str) -> dict:
             # Insert chunks into Milvus
             vector_service.insert_chunks(
                 domain=domain,
-                gym_name=gym_name,
+                site_name=site_name,  # DEPRECATED: was gym_name=gym_name
                 page_name=page_name,
                 page_url=page_url,
                 chunks=chunks,

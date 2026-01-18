@@ -2,7 +2,16 @@
 from .storage_service import StorageService, storage_service
 from .session_manager import SessionManager, session_manager
 from .http_client import HTTPClient, fetch_url
-from .vector_service import VectorService, vector_service
+# Migrated to Cohere embed-v4.0 + rerank-v4.0-fast for API-based embeddings
+from .vector_service_cohere import VectorServiceCohere, vector_service
+# LLM provider abstraction for Claude and Ollama
+from .llm_provider import (
+    LLMProvider,
+    ClaudeProvider,
+    OllamaProvider,
+    get_query_provider,
+    get_answer_provider,
+)
 
 __all__ = [
     "StorageService",
@@ -11,6 +20,11 @@ __all__ = [
     "session_manager",
     "HTTPClient",
     "fetch_url",
-    "VectorService",
+    "VectorServiceCohere",
     "vector_service",
+    "LLMProvider",
+    "ClaudeProvider",
+    "OllamaProvider",
+    "get_query_provider",
+    "get_answer_provider",
 ]

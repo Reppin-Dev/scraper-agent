@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+backend/venv/
+frontend/venv/
+.venv/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Data and databases
+data/
+chroma_db/
+backend/chroma_db/
+backend/data/
+backend/etcd_data/
+backend/milvus_data/
+backend/minio_data/
+*.sqlite3
+*.db
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker
+docker-compose*.yml
+Dockerfile.local
+
+# Environment
+.env
+.env.local
+backend/.env
+frontend/.env
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Test files
+backend/test_*.py
+backend/tests/
+
+# Development files
+backend/inspect_schema.py
+backend/Gym-Scraping-Instructions.txt
