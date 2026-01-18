@@ -1,4 +1,10 @@
-/Users/arshveergahir/Desktop/GitHub Repos/scraper-agent/backend/.env
+
+# env files
+**/*/.env
+
+
+# virtual environments
+**/*/venv
 
 # Runtime data directories
 backend/data/
@@ -6,3 +12,6 @@ backend/etcd_data/
 backend/milvus_data/
 backend/minio_data/
 backend/models/
+
+# runtime files
+ingress
